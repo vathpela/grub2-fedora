@@ -1,3 +1,8 @@
+2015-01-20  Vladimir Serbinenko  <phcoder@gmail.com>
+
+	* grub-core/kern/i386/tsc.c (calibrate_tsc): Ensure that
+	no division by 0 occurs.
+
 2014-06-21  Роман Пехов <roman_pekhov>
 
 	* grub-core/commands/loadenv.c (check_blocklists): Fix overlap check.
