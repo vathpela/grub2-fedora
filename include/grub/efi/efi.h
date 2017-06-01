@@ -47,8 +47,13 @@ EXPORT_FUNC(grub_efi_allocate_fixed) (grub_efi_physical_address_t address,
 				      grub_efi_uintn_t pages);
 void *
 EXPORT_FUNC(grub_efi_allocate_any_pages) (grub_efi_uintn_t pages);
+grub_efi_status_t EXPORT_FUNC(grub_efi_allocate_pool) (
+					grub_efi_memory_type_t pool_type,
+					grub_efi_uintn_t buffer_size,
+					void **buffer);
 void EXPORT_FUNC(grub_efi_free_pages) (grub_efi_physical_address_t address,
 				       grub_efi_uintn_t pages);
+grub_efi_status_t EXPORT_FUNC(grub_efi_free_pool) (void *buffer);
 int
 EXPORT_FUNC(grub_efi_get_memory_map) (grub_efi_uintn_t *memory_map_size,
 				      grub_efi_memory_descriptor_t *memory_map,
