@@ -191,7 +191,6 @@ grub_mmap_register (grub_uint64_t start, grub_uint64_t size, int type)
 {
   grub_uint64_t end = start + size;
   grub_efi_physical_address_t address;
-  grub_efi_boot_services_t *b;
   grub_efi_uintn_t pages;
   grub_efi_status_t status;
   struct overlay *curover;
@@ -200,17 +199,17 @@ grub_mmap_register (grub_uint64_t start, grub_uint64_t size, int type)
   if (! curover)
     return 0;
 
-  b = grub_efi_system_table->boot_services;
   address = start & (~0xfffULL);
   pages = (end - address + 0xfff) >> 12;
-  status = efi_call_2 (b->free_pages, address, pages);
+  status = grub_efi_free_pages (address, pages);
   if (status != GRUB_EFI_SUCCESS && status != GRUB_EFI_NOT_FOUND)
     {
       grub_free (curover);
       return 0;
     }
-  status = efi_call_4 (b->allocate_pages, GRUB_EFI_ALLOCATE_ADDRESS,
-		       make_efi_memtype (type), pages, &address);
+  status = grub_efi_allocate_pages_real (GRUB_EFI_ALLOCATE_ADDRESS,
+					 make_efi_memtype (type),
+					 pages, &address);
   if (status != GRUB_EFI_SUCCESS)
     {
       grub_free (curover);
@@ -229,17 +228,13 @@ grub_err_t
 grub_mmap_unregister (int handle)
 {
   struct overlay *curover, *prevover;
-  grub_efi_boot_services_t *b;
-
-  b = grub_efi_system_table->boot_services;
-
 
   for (curover = overlays, prevover = 0; curover;
        prevover = curover, curover = curover->next)
     {
       if (curover->handle == handle)
 	{
-	  efi_call_2 (b->free_pages, curover->address, curover->pages);
+	  grub_efi_free_pages (curover->address, curover->pages);
 	  if (prevover != 0)
 	    prevover->next = curover->next;
 	  else
@@ -259,7 +254,6 @@ grub_mmap_malign_and_register (grub_uint64_t align __attribute__ ((unused)),
 			       int flags __attribute__ ((unused)))
 {
   grub_efi_physical_address_t address;
-  grub_efi_boot_services_t *b;
   grub_efi_uintn_t pages;
   grub_efi_status_t status;
   struct overlay *curover;
@@ -269,36 +263,21 @@ grub_mmap_malign_and_register (grub_uint64_t align __attribute__ ((unused)),
   if (! curover)
     return 0;
 
-  b = grub_efi_system_table->boot_services;
-
-  address = 0xffffffff;
-
-#if GRUB_TARGET_SIZEOF_VOID_P < 8
   /* Limit the memory access to less than 4GB for 32-bit platforms.  */
+  address = GRUB_EFI_MAX_USABLE_ADDRESS;
+#if GRUB_TARGET_SIZEOF_VOID_P < 8
   atype = GRUB_EFI_ALLOCATE_MAX_ADDRESS;
 #else
   atype = GRUB_EFI_ALLOCATE_ANY_PAGES;
 #endif
 
   pages = (size + 0xfff) >> 12;
-  status = efi_call_4 (b->allocate_pages, atype,
-		       make_efi_memtype (type), pages, &address);
+  status = grub_efi_allocate_pages_real (atype, make_efi_memtype (type),
+					 pages, &address);
   if (status != GRUB_EFI_SUCCESS)
     {
       grub_free (curover);
       return 0;
-    }
-
-  if (address == 0)
-    {
-      /* Uggh, the address 0 was allocated... This is too annoying,
-	 so reallocate another one.  */
-      address = 0xffffffff;
-      status = efi_call_4 (b->allocate_pages, atype,
-			   make_efi_memtype (type), pages, &address);
-      grub_efi_free_pages (0, pages);
-      if (status != GRUB_EFI_SUCCESS)
-	return 0;
     }
 
   curover->next = overlays;

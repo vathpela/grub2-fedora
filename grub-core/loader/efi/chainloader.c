@@ -57,7 +57,7 @@ grub_chainloader_unload (void)
 
   b = grub_efi_system_table->boot_services;
   efi_call_1 (b->unload_image, image_handle);
-  efi_call_2 (b->free_pages, address, pages);
+  grub_efi_free_pages (address, pages);
 
   grub_free (file_path);
   grub_free (cmdline);
@@ -99,7 +99,7 @@ grub_chainloader_boot (void)
     }
 
   if (exit_data)
-    efi_call_1 (b->free_pool, exit_data);
+    grub_efi_free_pool (exit_data);
 
   grub_loader_unset ();
 
@@ -204,6 +204,7 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   grub_efi_loaded_image_t *loaded_image;
   char *filename;
   void *boot_image = 0;
+  void *load_addr = NULL;
   grub_efi_handle_t dev_handle = 0;
 
   if (argc == 0)
@@ -273,16 +274,16 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
     }
   pages = (((grub_efi_uintn_t) size + ((1 << 12) - 1)) >> 12);
 
-  status = efi_call_4 (b->allocate_pages, GRUB_EFI_ALLOCATE_ANY_PAGES,
-			      GRUB_EFI_LOADER_CODE,
-			      pages, &address);
-  if (status != GRUB_EFI_SUCCESS)
+  load_addr = grub_efi_allocate_any_pages (pages);
+  if (load_addr == NULL)
     {
       grub_dprintf ("chain", "Failed to allocate %u pages\n",
 		    (unsigned int) pages);
       grub_error (GRUB_ERR_OUT_OF_MEMORY, N_("out of memory"));
       goto fail;
     }
+
+  address = (grub_efi_physical_address_t)(grub_addr_t)load_addr;
 
   boot_image = (void *) ((grub_addr_t) address);
   if (grub_file_read (file, boot_image, size) != size)
@@ -400,7 +401,7 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   grub_free (file_path);
 
   if (address)
-    efi_call_2 (b->free_pages, address, pages);
+    grub_efi_free_pages (address, pages);
 
   grub_dl_unref (my_mod);
 

@@ -65,14 +65,11 @@ static void
 grub_efi_store_alloc (grub_efi_physical_address_t address,
                          grub_efi_uintn_t pages)
 {
-  grub_efi_boot_services_t *b;
   struct efi_allocation *alloc;
   grub_efi_status_t status;
 
-  b = grub_efi_system_table->boot_services;
-  status = efi_call_3 (b->allocate_pool, GRUB_EFI_LOADER_DATA,
-                           sizeof(*alloc), (void**)&alloc);
-
+  status = grub_efi_allocate_pool (GRUB_EFI_LOADER_DATA,
+				   sizeof(*alloc), (void**)&alloc);
   if (status == GRUB_EFI_SUCCESS)
     {
       alloc->next = efi_allocated_memory;
@@ -90,9 +87,6 @@ grub_efi_drop_alloc (grub_efi_physical_address_t address,
                            grub_efi_uintn_t pages)
 {
   struct efi_allocation *ea, *eap;
-  grub_efi_boot_services_t *b;
-
-  b = grub_efi_system_table->boot_services;
 
   for (eap = NULL, ea = efi_allocated_memory; ea; eap = ea, ea = ea->next)
     {
@@ -106,63 +100,78 @@ grub_efi_drop_alloc (grub_efi_physical_address_t address,
         efi_allocated_memory = ea->next;
 
       /* Then free the memory backing it. */
-      efi_call_1 (b->free_pool, ea);
+      grub_efi_free_pool (ea);
 
       /* And leave, we're done. */
       break;
     }
 }
 
-/* Allocate pages. Return the pointer to the first of allocated pages.  */
-void *
-grub_efi_allocate_pages_real (grub_efi_physical_address_t address,
+/* Allocate pages. */
+grub_efi_status_t
+grub_efi_allocate_pages_real (grub_efi_allocate_type_t alloctype,
+			      grub_efi_memory_type_t memtype,
 			      grub_efi_uintn_t pages,
-			      grub_efi_allocate_type_t alloctype,
-			      grub_efi_memory_type_t memtype)
+			      grub_efi_physical_address_t *address)
 {
   grub_efi_status_t status;
   grub_efi_boot_services_t *b;
 
+  if (!address)
+    return GRUB_EFI_INVALID_PARAMETER;
+
   /* Limit the memory access to less than 4GB for 32-bit platforms.  */
-  if (address > GRUB_EFI_MAX_USABLE_ADDRESS)
-    return 0;
+  if (*address > GRUB_EFI_MAX_USABLE_ADDRESS)
+    return GRUB_EFI_INVALID_PARAMETER;
 
   b = grub_efi_system_table->boot_services;
-  status = efi_call_4 (b->allocate_pages, alloctype, memtype, pages, &address);
+  status = efi_call_4 (b->allocate_pages, alloctype, memtype, pages, address);
   if (status != GRUB_EFI_SUCCESS)
-    return 0;
+    return status;
 
-  if (address == 0)
+  if (*address == 0 && alloctype != GRUB_EFI_ALLOCATE_ADDRESS)
     {
       /* Uggh, the address 0 was allocated... This is too annoying,
 	 so reallocate another one.  */
-      address = GRUB_EFI_MAX_USABLE_ADDRESS;
-      status = efi_call_4 (b->allocate_pages, alloctype, memtype, pages, &address);
+      *address = GRUB_EFI_MAX_USABLE_ADDRESS;
+      status = efi_call_4 (b->allocate_pages, alloctype, memtype, pages,
+			   address);
       grub_efi_free_pages (0, pages);
       if (status != GRUB_EFI_SUCCESS)
-	return 0;
+	return status;
     }
 
-  grub_efi_store_alloc (address, pages);
+  grub_efi_store_alloc (*address, pages);
 
-  return (void *) ((grub_addr_t) address);
+  return GRUB_EFI_SUCCESS;
 }
 
 void *
 grub_efi_allocate_any_pages (grub_efi_uintn_t pages)
 {
-  return grub_efi_allocate_pages_real (GRUB_EFI_MAX_USABLE_ADDRESS,
-				       pages, GRUB_EFI_ALLOCATE_MAX_ADDRESS,
-				       GRUB_EFI_LOADER_DATA);
+  grub_efi_status_t status;
+  grub_efi_physical_address_t address = GRUB_EFI_MAX_USABLE_ADDRESS;
+
+  status = grub_efi_allocate_pages_real (GRUB_EFI_ALLOCATE_MAX_ADDRESS,
+					 GRUB_EFI_LOADER_DATA,
+					 pages, &address);
+  if (status == GRUB_EFI_SUCCESS)
+    return (void *)address;
+  return NULL;
 }
 
 void *
 grub_efi_allocate_fixed (grub_efi_physical_address_t address,
 			 grub_efi_uintn_t pages)
 {
-  return grub_efi_allocate_pages_real (address, pages,
-				       GRUB_EFI_ALLOCATE_ADDRESS,
-				       GRUB_EFI_LOADER_DATA);
+  grub_efi_status_t status;
+
+  status = grub_efi_allocate_pages_real (GRUB_EFI_ALLOCATE_ADDRESS,
+					 GRUB_EFI_LOADER_DATA,
+					 pages, &address);
+  if (status == GRUB_EFI_SUCCESS)
+    return (void *)address;
+  return NULL;
 }
 
 grub_efi_status_t
@@ -178,16 +187,19 @@ grub_efi_allocate_pool (grub_efi_memory_type_t pool_type,
 }
 
 /* Free pages starting from ADDRESS.  */
-void
+grub_efi_status_t
 grub_efi_free_pages (grub_efi_physical_address_t address,
 		     grub_efi_uintn_t pages)
 {
+  grub_efi_status_t status;
   grub_efi_boot_services_t *b;
 
   b = grub_efi_system_table->boot_services;
-  efi_call_2 (b->free_pages, address, pages);
+  status = efi_call_2 (b->free_pages, address, pages);
 
-  grub_efi_drop_alloc (address, pages);
+  if (status == GRUB_EFI_SUCCESS)
+    grub_efi_drop_alloc (address, pages);
+  return status;
 }
 
 grub_efi_status_t
@@ -494,11 +506,9 @@ add_memory_regions (grub_efi_memory_descriptor_t *memory_map,
 	  pages = required_pages;
 	}
 
-      addr = grub_efi_allocate_pages_real (start, pages,
-					   GRUB_EFI_ALLOCATE_ADDRESS,
-					   GRUB_EFI_LOADER_CODE);      
-      if (! addr)
-	grub_fatal ("cannot allocate conventional memory %p with %u pages",
+      addr = grub_efi_allocate_fixed (start, pages);
+      if (addr == NULL)
+	grub_fatal ("cannot allocate conventional memory %p with %u pages\n",
 		    (void *) ((grub_addr_t) start),
 		    (unsigned) pages);
 
@@ -510,7 +520,7 @@ add_memory_regions (grub_efi_memory_descriptor_t *memory_map,
     }
 
   if (required_pages > 0)
-    grub_fatal ("too little memory");
+    grub_fatal ("too little memory\n");
 }
 
 void

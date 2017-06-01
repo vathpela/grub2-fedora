@@ -90,30 +90,25 @@ grub_relocator_firmware_fill_events (struct grub_relocator_mmap_event *events)
 int
 grub_relocator_firmware_alloc_region (grub_addr_t start, grub_size_t size)
 {
-  grub_efi_boot_services_t *b;
-  grub_efi_physical_address_t address = start;
-  grub_efi_status_t status;
+  void *addr;
 
   if (grub_efi_is_finished)
     return 1;
+
 #ifdef DEBUG_RELOCATOR_NOMEM_DPRINTF
   grub_dprintf ("relocator", "EFI alloc: %llx, %llx\n",
 		(unsigned long long) start, (unsigned long long) size);
 #endif
-  b = grub_efi_system_table->boot_services;
-  status = efi_call_4 (b->allocate_pages, GRUB_EFI_ALLOCATE_ADDRESS,
-		       GRUB_EFI_LOADER_DATA, size >> 12, &address);
-  return (status == GRUB_EFI_SUCCESS);
+  addr = grub_efi_allocate_fixed ((grub_efi_physical_address_t)start,
+				  size >> 12);
+  return (addr != NULL);
 }
 
 void
 grub_relocator_firmware_free_region (grub_addr_t start, grub_size_t size)
 {
-  grub_efi_boot_services_t *b;
-
   if (grub_efi_is_finished)
     return;
 
-  b = grub_efi_system_table->boot_services;
-  efi_call_2 (b->free_pages, start, size >> 12);
+  grub_efi_free_pages (start, size >> 12);
 }
