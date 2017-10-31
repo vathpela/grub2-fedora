@@ -46,9 +46,12 @@ static grub_dl_t my_mod;
 
 static grub_efi_physical_address_t address;
 static grub_efi_uintn_t pages;
+static grub_ssize_t fsize;
 static grub_efi_device_path_t *file_path;
 static grub_efi_handle_t image_handle;
 static grub_efi_char16_t *cmdline;
+static grub_ssize_t cmdline_len;
+static grub_efi_handle_t dev_handle;
 
 static grub_err_t
 grub_chainloader_unload (void)
@@ -63,6 +66,7 @@ grub_chainloader_unload (void)
   grub_free (cmdline);
   cmdline = 0;
   file_path = 0;
+  dev_handle = 0;
 
   grub_dl_unref (my_mod);
   return GRUB_ERR_NONE;
@@ -196,7 +200,6 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
 		      int argc, char *argv[])
 {
   grub_file_t file = 0;
-  grub_ssize_t size;
   grub_efi_status_t status;
   grub_efi_boot_services_t *b;
   grub_device_t dev = 0;
@@ -205,7 +208,6 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   char *filename;
   void *boot_image = 0;
   void *load_addr = NULL;
-  grub_efi_handle_t dev_handle = 0;
 
   if (argc == 0)
     return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("filename expected"));
@@ -217,8 +219,35 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   address = 0;
   image_handle = 0;
   file_path = 0;
+  dev_handle = 0;
 
   b = grub_efi_system_table->boot_services;
+
+  if (argc > 1)
+    {
+      int i;
+      grub_efi_char16_t *p16;
+
+      for (i = 1, cmdline_len = 0; i < argc; i++)
+        cmdline_len += grub_strlen (argv[i]) + 1;
+
+      cmdline_len *= sizeof (grub_efi_char16_t);
+      cmdline = p16 = grub_malloc (cmdline_len);
+      if (! cmdline)
+        goto fail;
+
+      for (i = 1; i < argc; i++)
+        {
+          char *p8;
+
+          p8 = argv[i];
+          while (*p8)
+            *(p16++) = *(p8++);
+
+          *(p16++) = ' ';
+        }
+      *(--p16) = 0;
+    }
 
   file = grub_file_open (filename);
   if (! file)
@@ -268,14 +297,14 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   grub_printf ("file path: ");
   grub_efi_print_device_path (file_path);
 
-  size = grub_file_size (file);
-  if (!size)
+  fsize = grub_file_size (file);
+  if (!fsize)
     {
       grub_error (GRUB_ERR_BAD_OS, N_("premature end of file %s"),
 		  filename);
       goto fail;
     }
-  pages = (((grub_efi_uintn_t) size + ((1 << 12) - 1)) >> 12);
+  pages = (((grub_efi_uintn_t) fsize + ((1 << 12) - 1)) >> 12);
 
   load_addr = grub_efi_allocate_any_pages (pages);
   if (load_addr == NULL)
@@ -289,7 +318,7 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   address = (grub_efi_physical_address_t)(grub_addr_t)load_addr;
 
   boot_image = (void *) ((grub_addr_t) address);
-  if (grub_file_read (file, boot_image, size) != size)
+  if (grub_file_read (file, boot_image, fsize) != fsize)
     {
       if (grub_errno == GRUB_ERR_NONE)
 	grub_error (GRUB_ERR_BAD_OS, N_("premature end of file %s"),
@@ -299,7 +328,7 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
     }
 
 #if defined (__i386__) || defined (__x86_64__)
-  if (size >= (grub_ssize_t) sizeof (struct grub_macho_fat_header))
+  if (fsize >= (grub_ssize_t) sizeof (struct grub_macho_fat_header))
     {
       struct grub_macho_fat_header *head = boot_image;
       if (head->magic
@@ -308,6 +337,7 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
 	  grub_uint32_t i;
 	  struct grub_macho_fat_arch *archs
 	    = (struct grub_macho_fat_arch *) (head + 1);
+
 	  for (i = 0; i < grub_cpu_to_le32 (head->nfat_arch); i++)
 	    {
 	      if (GRUB_MACHO_CPUTYPE_IS_HOST_CURRENT (archs[i].cputype))
@@ -322,21 +352,20 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
 	      > ~grub_cpu_to_le32 (archs[i].size)
 	      || grub_cpu_to_le32 (archs[i].offset)
 	      + grub_cpu_to_le32 (archs[i].size)
-	      > (grub_size_t) size)
+	      > (grub_size_t) fsize)
 	    {
 	      grub_error (GRUB_ERR_BAD_OS, N_("premature end of file %s"),
 			  filename);
 	      goto fail;
 	    }
 	  boot_image = (char *) boot_image + grub_cpu_to_le32 (archs[i].offset);
-	  size = grub_cpu_to_le32 (archs[i].size);
+	  fsize = grub_cpu_to_le32 (archs[i].size);
 	}
     }
 #endif
 
   status = efi_call_6 (b->load_image, 0, grub_efi_image_handle, file_path,
-		       boot_image, size,
-		       &image_handle);
+		       boot_image, fsize, &image_handle);
   if (status != GRUB_EFI_SUCCESS)
     {
       if (status == GRUB_EFI_OUT_OF_RESOURCES)
@@ -358,33 +387,10 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
     }
   loaded_image->device_handle = dev_handle;
 
-  if (argc > 1)
+  if (cmdline)
     {
-      int i, len;
-      grub_efi_char16_t *p16;
-
-      for (i = 1, len = 0; i < argc; i++)
-        len += grub_strlen (argv[i]) + 1;
-
-      len *= sizeof (grub_efi_char16_t);
-      cmdline = p16 = grub_malloc (len);
-      if (! cmdline)
-        goto fail;
-
-      for (i = 1; i < argc; i++)
-        {
-          char *p8;
-
-          p8 = argv[i];
-          while (*p8)
-            *(p16++) = *(p8++);
-
-          *(p16++) = ' ';
-        }
-      *(--p16) = 0;
-
       loaded_image->load_options = cmdline;
-      loaded_image->load_options_size = len;
+      loaded_image->load_options_size = cmdline_len;
     }
 
   grub_file_close (file);
@@ -405,6 +411,9 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
 
   if (address)
     grub_efi_free_pages (address, pages);
+
+  if (cmdline)
+    grub_free (cmdline);
 
   grub_dl_unref (my_mod);
 
