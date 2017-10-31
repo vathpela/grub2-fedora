@@ -194,7 +194,15 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
       goto fail;
     }
 
-  params = grub_efi_allocate_any_pages (BYTES_TO_PAGES(sizeof(*params)));
+  rc = grub_linuxefi_secure_validate (kernel, filelen);
+  if (rc < 0)
+    {
+      grub_error (GRUB_ERR_INVALID_COMMAND, N_("%s has invalid signature"),
+		  argv[0]);
+      goto fail;
+    }
+
+  params = grub_efi_allocate_any_pages (BYTES_TO_PAGES (sizeof (*params)));
   if (! params)
     {
       grub_error (GRUB_ERR_OUT_OF_MEMORY, "cannot allocate kernel parameters");

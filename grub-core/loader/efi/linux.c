@@ -23,6 +23,54 @@
 #include <grub/efi/efi.h>
 #include <grub/efi/pe32.h>
 #include <grub/efi/linux.h>
+#include <grub/efi/sb.h>
+
+#define SHIM_LOCK_GUID \
+ { 0x605dab50, 0xe046, 0x4300, {0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23} }
+
+struct grub_efi_shim_lock
+{
+  grub_efi_status_t (*verify) (void *buffer, grub_uint32_t size);
+};
+typedef struct grub_efi_shim_lock grub_efi_shim_lock_t;
+
+int
+grub_linuxefi_secure_validate (void *data, grub_uint32_t size)
+{
+  grub_efi_guid_t guid = SHIM_LOCK_GUID;
+  grub_efi_shim_lock_t *shim_lock;
+  grub_efi_status_t status;
+
+  if (!grub_efi_secure_boot ())
+    {
+      grub_dprintf ("secureboot", "Secure Boot is not enabled\n");
+      return 0;
+    }
+
+  shim_lock = grub_efi_locate_protocol(&guid, NULL);
+  grub_dprintf ("secureboot", "shim_lock: %p\n", shim_lock);
+  if (!shim_lock)
+    {
+      grub_dprintf ("secureboot", "shim not available\n");
+      grub_error (GRUB_ERR_ACCESS_DENIED,
+		  "Cannot validate Secure Boot signatures.");
+      return -1;
+    }
+
+  grub_dprintf ("secureboot", "Asking shim to verify kernel signature\n");
+  status = shim_lock->verify (data, size);
+  grub_dprintf ("secureboot", "shim_lock->verify(): %ld\n", status);
+  if (status == GRUB_EFI_SUCCESS)
+    {
+      grub_dprintf ("secureboot", "Kernel signature verification passed\n");
+      return 1;
+    }
+
+  grub_error (GRUB_ERR_ACCESS_DENIED,
+	      "Kernel signature verification failed (0x%lx)\n",
+	      (unsigned long)status);
+  return -1;
+}
 
 typedef void (*handover_func) (void *, grub_efi_system_table_t *, void *);
 

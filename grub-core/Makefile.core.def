@@ -211,12 +211,14 @@ kernel = {
 
   i386_efi = kern/i386/efi/init.c;
   i386_efi = bus/pci.c;
+  i386_efi = loader/efi/sb.c;
 
   x86_64 = kern/x86_64/dl.c;
   x86_64_xen = kern/x86_64/dl.c;
   x86_64_efi = kern/x86_64/efi/callwrap.S;
   x86_64_efi = kern/i386/efi/init.c;
   x86_64_efi = bus/pci.c;
+  x86_64_efi = loader/efi/sb.c;
 
   xen = kern/i386/tsc.c;
   xen = kern/i386/xen/tsc.c;
@@ -239,6 +241,7 @@ kernel = {
 
   arm64_efi = kern/arm64/efi/init.c;
   arm64_efi = kern/efi/fdt.c;
+  arm64_efi = loader/efi/sb.c;
 
   i386_pc = kern/i386/pc/init.c;
   i386_pc = kern/i386/pc/mmap.c;
@@ -1695,11 +1698,14 @@ module = {
   ia64_efi = loader/ia64/efi/linux.c;
   i386_efi = loader/i386/efi/linux.c;
   i386_efi = loader/efi/linux.c;
+  i386_efi = loader/efi/sb.c;
   x86_64_efi = loader/i386/efi/linux.c;
   x86_64_efi = loader/efi/linux.c;
+  x86_64_efi = loader/efi/sb.c;
   arm = loader/arm/linux.c;
   arm64 = loader/arm64/linux.c;
-  arm64 = loader/efi/linux.c;
+  arm64 = lib/efi/linux.c;
+  arm64 = loader/efi/sb.c;
   fdt = lib/fdt.c;
   common = loader/linux.c;
   common = lib/cmdline.c;

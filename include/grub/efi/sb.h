@@ -1,6 +1,7 @@
+/* sb.h - declare functions for EFI Secure Boot support */
 /*
  *  GRUB  --  GRand Unified Bootloader
- *  Copyright (C) 2014  Free Software Foundation, Inc.
+ *  Copyright (C) 2006,2007,2008,2009  Free Software Foundation, Inc.
  *
  *  GRUB is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,17 +16,14 @@
  *  You should have received a copy of the GNU General Public License
  *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef GRUB_EFI_LINUX_HEADER
-#define GRUB_EFI_LINUX_HEADER	1
 
-#include <grub/efi/api.h>
-#include <grub/err.h>
-#include <grub/symbol.h>
+#ifndef GRUB_EFI_SB_HEADER
+#define GRUB_EFI_SB_HEADER	1
 
-int
-EXPORT_FUNC(grub_linuxefi_secure_validate) (void *data, grub_uint32_t size);
-grub_err_t
-EXPORT_FUNC(grub_efi_linux_boot) (void *kernel_address, grub_off_t offset,
-				  void *kernel_param);
+#include <grub/types.h>
+#include <grub/dl.h>
 
-#endif /* ! GRUB_EFI_LINUX_HEADER */
+/* Functions.  */
+int EXPORT_FUNC (grub_efi_secure_boot) (void);
+
+#endif /* ! GRUB_EFI_SB_HEADER */
