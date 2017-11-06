@@ -265,6 +265,7 @@ grub_main (void)
 {
   /* First of all, initialize the machine.  */
   grub_machine_init ();
+  grub_printf("\r\n");
 
   grub_boot_time ("After machine init.");
 
