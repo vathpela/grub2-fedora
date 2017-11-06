@@ -2,3 +2,7 @@
 #include <grub/dl.h>
 
 GRUB_MOD_LICENSE ("GPLv3+");
+GRUB_MOD_INIT(fakemod ## __COUNTER__)
+{
+	return;
+}
