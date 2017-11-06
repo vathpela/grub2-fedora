@@ -131,6 +131,11 @@ kernel = {
   common = kern/rescue_parser.c;
   common = kern/rescue_reader.c;
   common = kern/term.c;
+  common = kern/backtrace.c;
+
+  x86 = kern/i386/backtrace.c;
+  i386_xen = kern/i386/backtrace.c;
+  x86_64_xen = kern/i386/backtrace.c;
 
   noemu = kern/mm.c;
   noemu = kern/time.c;
@@ -2206,10 +2211,7 @@ module = {
 
 module = {
   name = backtrace;
-  x86 = lib/i386/backtrace.c;
-  i386_xen = lib/i386/backtrace.c;
-  x86_64_xen = lib/i386/backtrace.c;
-  common = lib/backtrace.c;
+  common = commands/backtrace.c;
   enable = x86;
   enable = i386_xen;
   enable = x86_64_xen;

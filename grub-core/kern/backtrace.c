@@ -26,10 +26,11 @@
 
 GRUB_MOD_LICENSE ("GPLv3+");
 
-void
-grub_backtrace_print_address (void *addr)
+static void
+grub_backtrace_print_address_default (void *addr)
 {
   grub_dl_t mod;
+  void *start_addr;
 
   FOR_DL_MODULES (mod)
   {
@@ -38,33 +39,38 @@ grub_backtrace_print_address (void *addr)
       if (segment->addr <= addr && (grub_uint8_t *) segment->addr
 	  + segment->size > (grub_uint8_t *) addr)
 	{
-	  grub_printf ("%s.%x+%" PRIxGRUB_SIZE, mod->name, segment->section,
-		       (grub_size_t) ((grub_uint8_t *) addr - (grub_uint8_t *) segment->addr));
+	  grub_printf ("%s.%x+%" PRIxGRUB_SIZE, mod->name,
+		       segment->section,
+		       (grub_size_t)
+		       ((grub_uint8_t *)addr - (grub_uint8_t *)segment->addr));
 	  return;
 	}
   }
 
-  grub_printf ("%p", addr);
+  start_addr = grub_resolve_symbol ("_start");
+  if (start_addr && start_addr < addr)
+    grub_printf ("kernel+%" PRIxGRUB_SIZE,
+		 (grub_size_t)
+		  ((grub_uint8_t *)addr - (grub_uint8_t *)start_addr));
+  else
+    grub_printf ("%p", addr);
 }
 
-static grub_err_t
-grub_cmd_backtrace (grub_command_t cmd __attribute__ ((unused)),
-		    int argc __attribute__ ((unused)),
-		    char **args __attribute__ ((unused)))
+void
+grub_backtrace_print_address (void *addr)
+     __attribute__((__weak__,
+		    __alias__(("grub_backtrace_print_address_default"))));
+
+static void
+grub_backtrace_arch_default(unsigned long skip)
 {
-  grub_backtrace ();
-  return 0;
+  grub_backtrace_pointer(__builtin_frame_address(0), skip + 1);
 }
 
-static grub_command_t cmd;
+void grub_backtrace_arch (unsigned long skip)
+     __attribute__((__weak__, __alias__(("grub_backtrace_arch_default"))));
 
-GRUB_MOD_INIT(backtrace)
+void grub_backtrace (unsigned long skip)
 {
-  cmd = grub_register_command ("backtrace", grub_cmd_backtrace,
-			       0, N_("Print backtrace."));
-}
-
-GRUB_MOD_FINI(backtrace)
-{
-  grub_unregister_command (cmd);
+  grub_backtrace_arch(skip + 1);
 }

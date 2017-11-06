@@ -24,6 +24,7 @@
 #include <grub/term.h>
 #include <grub/env.h>
 #include <grub/i18n.h>
+#include <grub/backtrace.h>
 
 union printf_arg
 {
@@ -1280,11 +1281,14 @@ grub_xasprintf (const char *fmt, ...)
 }
 
 /* Abort GRUB. This function does not return.  */
-static void __attribute__ ((noreturn))
+static inline void __attribute__ ((noreturn))
 grub_abort (void)
 {
+#ifndef GRUB_UTIL
+  grub_backtrace (1);
+#endif
   grub_printf ("\nAborted.");
-  
+
 #ifndef GRUB_UTIL
   if (grub_term_inputs)
 #endif
