@@ -24,43 +24,26 @@
 #include <grub/term.h>
 #include <grub/backtrace.h>
 
-#define MAX_STACK_FRAME 102400
+GRUB_MOD_LICENSE ("GPLv3+");
 
-void
-grub_backtrace_pointer (void *ebp)
+static grub_err_t
+grub_cmd_backtrace (grub_command_t cmd __attribute__ ((unused)),
+		    int argc __attribute__ ((unused)),
+		    char **args __attribute__ ((unused)))
 {
-  void *ptr, *nptr;
-  unsigned i;
-
-  ptr = ebp;
-  while (1)
-    {
-      grub_printf ("%p: ", ptr);
-      grub_backtrace_print_address (((void **) ptr)[1]);
-      grub_printf (" (");
-      for (i = 0; i < 2; i++)
-	grub_printf ("%p,", ((void **)ptr) [i + 2]);
-      grub_printf ("%p)\n", ((void **)ptr) [i + 2]);
-      nptr = *(void **)ptr;
-      if (nptr < ptr || (void **) nptr - (void **) ptr > MAX_STACK_FRAME
-	  || nptr == ptr)
-	{
-	  grub_printf ("Invalid stack frame at %p (%p)\n", ptr, nptr);
-	  break;
-	}
-      ptr = nptr;
-    }
+  grub_backtrace (1);
+  return 0;
 }
 
-void
-grub_backtrace (void)
+static grub_command_t cmd;
+
+GRUB_MOD_INIT(backtrace)
 {
-#ifdef __x86_64__
-  asm volatile ("movq %rbp, %rdi\n"
-		"call " EXT_C("grub_backtrace_pointer"));
-#else
-  asm volatile ("movl %ebp, %eax\n"
-		"call " EXT_C("grub_backtrace_pointer"));
-#endif
+  cmd = grub_register_command ("backtrace", grub_cmd_backtrace,
+			       0, N_("Print backtrace."));
 }
 
+GRUB_MOD_FINI(backtrace)
+{
+  grub_unregister_command (cmd);
+}

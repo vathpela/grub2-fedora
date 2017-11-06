@@ -47,6 +47,8 @@
 	
 	.text
 	.arm
+	.globl	start, _start
+FUNCTION(start)
 FUNCTION(_start)
 	b	codestart
 	
