@@ -565,6 +565,68 @@ grub_net_tcp_accept (grub_net_tcp_socket_t sock,
   return GRUB_ERR_NONE;
 }
 
+static void
+init_tcp_src_port (int *port)
+{
+  int new_port = *port;
+  int shift = 12; // one page...
+
+  /*
+   * Try to randomize the port number.
+   * I tried just doing grub_get_time_ms() a couple of times, and the numbers I
+   * got were... disturbingly monotonic.  First couple of runs of
+   * for (x = 0; x < 4; x++) {
+   *   grub_millisleep(11);
+   *   grub_printf("x: %x\n", grub_get_time_ms());
+   * }
+   * got me:
+   * 0x77, 0x82, 0x8d, 0x98, 0xa3
+   * 0x79, 0x84, 0x8f, 0x9a, 0xa5
+   * and similar series, so basically all that's here is jitter, and not
+   * enough of it to have good source port initialiation (or unique initial
+   * sequence numbers...)
+   *
+   * So use grub_millisleep() to guarantee we've got some jitter in the
+   * number, and then shift and or so the jitter is most of what we really
+   * have.
+   *
+   * It's worth noting, this is on a virtual machine, and it appears the
+   * clock source for grub_get_time_ms() doesn't often advance unless you
+   * poll it, so basically it advances by however much we do
+   * grub_millisleep().
+   */
+   while (new_port < 2 || new_port >= 65534)
+    {
+      int x, y, z;
+
+      grub_millisleep (13);
+      y = grub_get_time_ms ();
+      grub_millisleep (37);
+      z = grub_get_time_ms ();
+
+      for (x = 0; x < 33; x++)
+        {
+          grub_millisleep (0x11);
+          z = grub_get_time_ms ();
+          if (x % 2)
+	    continue;
+          new_port = (new_port << 1) | (y & 0x1);
+          y = z;
+        }
+
+      new_port &= 0xffff;
+      grub_dprintf ("tcp", "initial source port %u\n", new_port);
+
+      /* if we still don't have any number in range, just take the page number
+       * of our socket...
+       */
+      while (new_port < 2 || new_port >= 65534)
+	new_port = (grub_uint16_t)(((unsigned long long)port >> shift++) & 0xffff);
+    }
+
+  *port = new_port;
+}
+
 grub_net_tcp_socket_t
 grub_net_tcp_open (char *server,
 		   grub_uint16_t out_port,
@@ -582,7 +644,7 @@ grub_net_tcp_open (char *server,
   struct grub_net_network_level_interface *inf;
   grub_net_network_level_address_t gateway;
   grub_net_tcp_socket_t socket;
-  static grub_uint16_t in_port = 21550;
+  static grub_uint16_t in_port;
   struct grub_net_buff *nb;
   struct tcp_synhdr *tcph;
   int i;
@@ -612,11 +674,20 @@ grub_net_tcp_open (char *server,
   if (socket == NULL)
     return NULL; 
 
+  if (in_port == 0)
+    {
+      init_tcp_src_port (&socket->in_port);
+      in_port = socket->in_port;
+    }
+  else if (in_port == 65535)
+    in_port = 2;
+  socket->in_port = in_port++;
+  grub_dprintf ("tcp", "new source port is %d\n", socket->in_port);
+
   socket->out_port = out_port;
   socket->inf = inf;
   socket->out_nla = addr;
   socket->ll_target_addr = ll_target_addr;
-  socket->in_port = in_port++;
   socket->recv_hook = recv_hook;
   socket->error_hook = error_hook;
   socket->fin_hook = fin_hook;
