@@ -483,7 +483,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       || GRUB_EFI_DEVICE_PATH_SUBTYPE (ldp) != GRUB_EFI_URI_DEVICE_PATH_SUBTYPE)
     {
       grub_free (ddp);
-      grub_free (ldp);
       return NULL;
     }
 
@@ -492,7 +491,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
   if (!uri_len)
     {
       grub_free (ddp);
-      grub_free (ldp);
       return NULL;
     }
 
@@ -509,7 +507,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
           && GRUB_EFI_DEVICE_PATH_SUBTYPE (ldp) != GRUB_EFI_IPV6_DEVICE_PATH_SUBTYPE))
     {
       grub_free (ddp);
-      grub_free (ldp);
       return NULL;
     }
 
@@ -517,7 +514,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
   if (!nb)
     {
       grub_free (ddp);
-      grub_free (ldp);
       return NULL;
     }
 
@@ -534,7 +530,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -542,7 +537,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (sizeof(bp->boot_file) < uri_len)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -560,7 +554,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -573,7 +566,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -586,7 +578,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -604,7 +595,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
 	  if (err)
 	    {
 	      grub_free (ddp);
-	      grub_free (ldp);
 	      grub_netbuff_free (nb);
 	      return NULL;
 	    }
@@ -619,7 +609,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -655,7 +644,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -666,7 +654,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -677,7 +664,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -687,7 +673,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -699,7 +684,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -710,7 +694,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       if (err)
 	{
 	  grub_free (ddp);
-	  grub_free (ldp);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -728,7 +711,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
 	  if (err)
 	  {
 	    grub_free (ddp);
-	    grub_free (ldp);
 	    grub_netbuff_free (nb);
 	    return NULL;
 	  }
@@ -741,7 +723,6 @@ grub_efinet_create_dhcp_ack_from_device_path (grub_efi_device_path_t *dp, int *u
       *use_ipv6 = 1;
     }
 
-  grub_free (ldp);
   grub_free (ddp);
   return nb;
 }
