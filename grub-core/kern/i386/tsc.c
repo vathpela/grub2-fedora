@@ -36,9 +36,21 @@ grub_uint32_t grub_tsc_rate;
 static grub_uint64_t
 grub_tsc_get_time_ms (void)
 {
-  grub_uint64_t a = grub_get_tsc () - tsc_boot_time;
-  grub_uint64_t ah = a >> 32;
-  grub_uint64_t al = a & 0xffffffff;
+  grub_uint64_t a, ah, al;
+  grub_uint64_t x = 0;
+
+  /* Add some jitter.  This algorithm is completely arbitrary, but it works
+   * better the other 10 things I've tried.
+   */
+  do {
+      grub_uint64_t y = grub_get_tsc() & grub_tsc_rate;
+      x += y;
+      grub_cpu_idle ();
+  } while (x < grub_tsc_rate << 8);
+
+  a = grub_get_tsc () - tsc_boot_time;
+  ah = a >> 32;
+  al = a & 0xffffffff;
 
   return ((al * grub_tsc_rate) >> 32) + ah * grub_tsc_rate;
 }
