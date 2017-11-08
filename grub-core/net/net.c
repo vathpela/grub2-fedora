@@ -1680,7 +1680,8 @@ grub_net_poll_cards (unsigned time, int *stop_condition)
 	 && (!stop_condition || !*stop_condition))
     FOR_NET_CARDS (card)
       receive_packets (card, stop_condition);
-  grub_net_tcp_retransmit ();
+  if (!stop_condition || !*stop_condition)
+    grub_net_tcp_retransmit ();
 }
 
 static void
