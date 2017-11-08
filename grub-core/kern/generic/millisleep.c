@@ -28,6 +28,7 @@ grub_millisleep (grub_uint32_t ms)
   grub_uint64_t start;
 
   start = grub_get_time_ms ();
+  grub_cpu_idle ();
 
   /* Instead of setting an end time and looping while the current time is
      less than that, comparing the elapsed sleep time with the desired sleep
