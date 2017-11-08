@@ -19,11 +19,25 @@
 #ifndef KERNEL_CPU_TIME_HEADER
 #define KERNEL_CPU_TIME_HEADER	1
 
+/* FIXME: Make grub_get_time_raw () and grub_get_time_scale () that actually
+ * examine our real clock hardware or whatever time source we've calibrated.
+ */
+#include <grub/i386/tsc.h>
+#define grub_get_time_raw() grub_get_tsc()
+/* tsc scale was 0x6ff on my 2.4GHz laptop, so here's a value that's a
+ * bit sloppy but probably won't undershoot.
+ */
+#define grub_get_time_scale() (0x6ff << 1)
+
 static __inline void
 grub_cpu_idle (void)
 {
-  /* FIXME: this can't work until we handle interrupts.  */
-/*  __asm__ __volatile__ ("hlt"); */
+  /* Wait an amount of time our clock can measure. */
+  grub_uint64_t b, a = grub_get_time_raw ();
+  grub_uint64_t scale = grub_get_time_scale () + 1;
+
+  while ((b = grub_get_time_raw ()) - a < scale)
+    ;
 }
 
 #endif /* ! KERNEL_CPU_TIME_HEADER */
