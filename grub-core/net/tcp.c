@@ -261,7 +261,10 @@ tcp_send (struct grub_net_buff *nb, grub_net_tcp_socket_t socket)
       if (!socket->unack_last)
 	socket->unack_first = socket->unack_last = unack;
       else
-	socket->unack_last->next = unack;
+	{
+	  socket->unack_last->next = unack;
+	  socket->unack_last = unack;
+	}
     }
 
   err = grub_net_send_ip_packet (socket->inf, &(socket->out_nla),
