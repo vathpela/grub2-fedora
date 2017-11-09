@@ -328,6 +328,7 @@ grub_net_tcp_close (grub_net_tcp_socket_t sock,
   tcph_fin->ack = grub_cpu_to_be32 (sock->their_cur_seq);
   tcph_fin->flags = tcpsize (sizeof *tcph_fin) | TCP_FIN | TCP_ACK;
   tcph_fin->window = grub_cpu_to_be16_compile_time (0);
+  tcph_fin->window = grub_cpu_to_be16 (sock->my_window);
   tcph_fin->urgent = 0;
   err = tcp_send (nb_fin, sock);
   if (err)
