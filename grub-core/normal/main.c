@@ -242,6 +242,7 @@ grub_normal_init_page (struct grub_term_output *term,
 static void
 read_lists (const char *val)
 {
+  return;
   if (! grub_no_modules)
     {
       read_command_list (val);
