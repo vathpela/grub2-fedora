@@ -236,6 +236,15 @@ grub_efinet_findcards (void)
   grub_efi_handle_t *handles;
   grub_efi_handle_t *handle;
   int i = 0;
+  static int once = 0;
+
+  if (!once)
+    {
+      //grub_env_set ("debug", "net,tcp,http,tcp-window");
+      //grub_env_set ("debug", "tcp-window");
+      once = 1;
+    }
+
 
   /* Find handles which support the disk io interface.  */
   handles = grub_efi_locate_handle (GRUB_EFI_BY_PROTOCOL, &net_io_guid,
