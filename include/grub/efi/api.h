@@ -495,8 +495,12 @@ typedef grub_efi_intn_t grub_efi_status_t;
 
 #define GRUB_EFI_ERROR_CODE(value)	\
   ((((grub_efi_status_t) 1) << (sizeof (grub_efi_status_t) * 8 - 1)) | (value))
+#define GRUB_EFI_ERROR(value)		\
+  (~((((grub_efi_status_t) 1) << (sizeof (grub_efi_status_t) * 8 - 1)) | (~(value))))
 
 #define GRUB_EFI_WARNING_CODE(value)	(value)
+#define GRUB_EFI_WARNING(value)		(GRUB_EFI_ERROR(value) ? 0 : (value))
+
 
 #define GRUB_EFI_SUCCESS		0
 
