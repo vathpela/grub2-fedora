@@ -114,29 +114,40 @@ get_card_packet (struct grub_net_card *dev)
   grub_efi_simple_network_t *net = dev->efi_net;
   grub_err_t err;
   grub_efi_status_t st;
-  grub_efi_uintn_t bufsize = dev->rcvbufsize;
+  grub_efi_uintn_t bufsize;
   struct grub_net_buff *nb;
   int i;
 
   for (i = 0; i < 2; i++)
     {
+      bufsize = dev->rcvbufsize;
       if (!dev->rcvbuf)
 	dev->rcvbuf = grub_malloc (dev->rcvbufsize);
       if (!dev->rcvbuf)
 	return NULL;
 
+      grub_dprintf ("efinet", "bufsize for receive(): %lu\n", bufsize);
       st = efi_call_7 (net->receive, net, NULL, &bufsize,
 		       dev->rcvbuf, NULL, NULL, NULL);
+      if (!GRUB_EFI_ERROR(st))
+	{
+	  grub_dprintf ("efinet", "bufsize as read: %lu\n", bufsize);
+	  break;
+	}
       if (st != GRUB_EFI_BUFFER_TOO_SMALL)
 	break;
       dev->rcvbufsize = 2 * ALIGN_UP (dev->rcvbufsize > bufsize
 				      ? dev->rcvbufsize : bufsize, 64);
       grub_free (dev->rcvbuf);
-      dev->rcvbuf = 0;
+      dev->rcvbuf = NULL;
     }
 
   if (st != GRUB_EFI_SUCCESS)
-    return NULL;
+    {
+      grub_dprintf ("efinet", "error: net->receive(%lu, 0x%p) = %lu\n",
+		    bufsize, dev->rcvbuf, GRUB_EFI_ERROR(st));
+      return NULL;
+    }
 
   nb = grub_netbuff_alloc (bufsize + 2);
   if (!nb)
