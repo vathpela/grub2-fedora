@@ -108,6 +108,72 @@ send_card_buffer (struct grub_net_card *dev,
   return GRUB_ERR_NONE;
 }
 
+static int
+recv_pending (struct grub_net_card *dev)
+{
+  grub_efi_simple_network_t *net = dev->efi_net;
+  grub_efi_status_t st;
+  grub_efi_uintn_t headersize = 0;
+  grub_efi_uintn_t bufsize = 0;
+  unsigned long a, b;
+
+  if (!dev->rcvbuf)
+    dev->rcvbuf = grub_malloc (dev->rcvbufsize);
+  if (!dev->rcvbuf)
+    return -1;
+
+  /* You would think the way to do this is to set bufsize=0 and pass NULL
+   * for buffer.  But no, that gets you EFI_INVALID_PARAMETER.  The spec says
+   * bufsize=0 should get you EFI_BUFFER_TOO_SMALL and then allocating the
+   * buffer bigger and trying again will get your packets.  I've seen
+   * two different driver bugs that are both pretty unfortunate after that.
+   *
+   * 1) One version of the Ovmf virtio driver (I don't think it's actually
+   * the virtio part) ignores that bufsize=0, and so rather than merely
+   * updating bufsize, it also writes the packet into the buffer, no matter
+   * what size you said the buffer is.  As a result, if you just do "char
+   * recvbuf[4]" and use that, your code gets overwritten with your packet.
+   *
+   * 2) The Rainbow Pass machine in front of me correctly reports the buffer
+   * size of the incoming packet and does not fill out the buffer if bufsize
+   * was 0.  Unfortunately, the next time you call it with a buffer you
+   * still get the wrong packet.  Hopefully that means we never really get
+   * EFI_BUFFER_TOO_SMALL as long as bufsize > net->mode->max_packet_size,
+   * because that'll mean we miss packets.
+   *
+   * So we have to actually be prepared to receive our packet here.
+   */
+  if (dev->rcvbuf_in_use)
+    return 1;
+
+  bufsize = dev->rcvbufsize;
+  a = grub_get_time_ms();
+  st = efi_call_7 (net->receive, net, &headersize, &bufsize,
+		   dev->rcvbuf, NULL, NULL, NULL);
+  b = grub_get_time_ms();
+  grub_dprintf ("efinet", "st=%lu hsz=%lu sz=%lu (%ld msec)\n",
+		GRUB_EFI_ERROR(st), headersize, bufsize, b-a);
+
+  if (!GRUB_EFI_ERROR(st))
+    {
+      dev->rcvbuf_in_use = bufsize;
+      return bufsize;
+    }
+  if (st == GRUB_EFI_BUFFER_TOO_SMALL)
+    {
+      grub_dprintf ("efinet", "buffer of %lu was too small for %lu packet\n",
+		    dev->rcvbufsize, bufsize);
+      grub_free (dev->rcvbuf);
+      dev->rcvbufsize = 2 * ALIGN_UP (dev->rcvbufsize > bufsize
+				      ? dev->rcvbufsize : bufsize, 64);
+      dev->rcvbuf = grub_zalloc (dev->rcvbufsize);
+      if (!dev->rcvbuf)
+        return -1;
+      return bufsize;
+    }
+  return -1;
+}
+
 static struct grub_net_buff *
 get_card_packet (struct grub_net_card *dev)
 {
@@ -118,35 +184,50 @@ get_card_packet (struct grub_net_card *dev)
   struct grub_net_buff *nb;
   int i;
 
-  for (i = 0; i < 2; i++)
+  if (dev->rcvbuf_in_use)
     {
-      bufsize = dev->rcvbufsize;
-      if (!dev->rcvbuf)
-	dev->rcvbuf = grub_malloc (dev->rcvbufsize);
-      if (!dev->rcvbuf)
-	return NULL;
-
-      grub_dprintf ("efinet", "bufsize for receive(): %lu\n", bufsize);
-      st = efi_call_7 (net->receive, net, NULL, &bufsize,
-		       dev->rcvbuf, NULL, NULL, NULL);
-      if (!GRUB_EFI_ERROR(st))
-	{
-	  grub_dprintf ("efinet", "bufsize as read: %lu\n", bufsize);
-	  break;
-	}
-      if (st != GRUB_EFI_BUFFER_TOO_SMALL)
-	break;
-      dev->rcvbufsize = 2 * ALIGN_UP (dev->rcvbufsize > bufsize
-				      ? dev->rcvbufsize : bufsize, 64);
-      grub_free (dev->rcvbuf);
-      dev->rcvbuf = NULL;
+      bufsize = dev->rcvbuf_in_use;
+      dev->rcvbuf_in_use = 0;
+      grub_dprintf ("efinet", "st=0 sz=%lu\n", bufsize);
     }
-
-  if (st != GRUB_EFI_SUCCESS)
+  else
     {
-      grub_dprintf ("efinet", "error: net->receive(%lu, 0x%p) = %lu\n",
-		    bufsize, dev->rcvbuf, GRUB_EFI_ERROR(st));
-      return NULL;
+      for (i = 0; i < 2; i++)
+	{
+	  bufsize = dev->rcvbufsize;
+	  if (!dev->rcvbuf)
+	    dev->rcvbuf = grub_malloc (dev->rcvbufsize);
+	  if (!dev->rcvbuf)
+	    return NULL;
+
+	  grub_dprintf ("efinet", "bufsize for receive(): %lu\n", bufsize);
+	  st = efi_call_7 (net->receive, net, NULL, &bufsize,
+			   dev->rcvbuf, NULL, NULL, NULL);
+	  if (!GRUB_EFI_ERROR(st))
+	    {
+	      grub_dprintf ("efinet", "bufsize as read: %lu\n", bufsize);
+	      break;
+	    }
+	  if (st != GRUB_EFI_BUFFER_TOO_SMALL)
+	    break;
+	  grub_dprintf ("efinet",
+			"buffer of %lu was too small for %lu packet\n",
+			dev->rcvbufsize, bufsize);
+	  dev->rcvbufsize = 2 * ALIGN_UP (dev->rcvbufsize > bufsize
+					  ? dev->rcvbufsize : bufsize, 64);
+	  grub_free (dev->rcvbuf);
+	  dev->rcvbuf = NULL;
+	}
+
+      if (st != GRUB_EFI_SUCCESS)
+	{
+	  grub_dprintf ("efinet", "error: net->receive(%lu, 0x%p) = %lu\n",
+			bufsize, dev->rcvbuf, GRUB_EFI_ERROR(st));
+	  return NULL;
+	}
+
+      //bufsize = dev->rcvbufsize;
+      grub_dprintf ("efinet", "st=0 sz=%lu\n", bufsize);
     }
 
   nb = grub_netbuff_alloc (bufsize + 2);
@@ -246,7 +327,8 @@ static struct grub_net_card_driver efidriver =
     .open = open_card,
     .close = close_card,
     .send = send_card_buffer,
-    .recv = get_card_packet
+    .recv = get_card_packet,
+    .recv_pending = recv_pending,
   };
 
 grub_efi_handle_t
@@ -348,6 +430,7 @@ grub_efinet_findcards (void)
       card->txbusy = 0;
 
       card->rcvbufsize = ALIGN_UP (card->mtu, 64) + 256;
+      card->rcvbuf = grub_zalloc (card->rcvbufsize);
 
       card->name = grub_xasprintf ("efinet%d", i++);
       card->driver = &efidriver;

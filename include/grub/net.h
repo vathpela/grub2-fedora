@@ -82,6 +82,7 @@ struct grub_net_card_driver
   grub_err_t (*send) (struct grub_net_card *dev,
 		      struct grub_net_buff *buf);
   struct grub_net_buff * (*recv) (struct grub_net_card *dev);
+  int (*recv_pending)(struct grub_net_card *dev);
 };
 
 typedef struct grub_net_packet
@@ -143,6 +144,7 @@ struct grub_net_card
       struct grub_efi_simple_network *efi_net;
       grub_efi_handle_t efi_handle;
       grub_size_t last_pkt_size;
+      grub_size_t rcvbuf_in_use;
     };
 #endif
     void *data;
@@ -358,9 +360,18 @@ grub_net_app_level_unregister (grub_net_app_level_t proto)
 
 extern struct grub_net_card *grub_net_cards;
 
+static inline int __attribute__ ((__unused__))
+grub_net_generic_recv_pending (struct grub_net_card *dev __attribute__ ((__unused__)))
+{
+  return -1;
+}
+
 static inline void
 grub_net_card_register (struct grub_net_card *card)
 {
+  if (!card->driver->recv_pending)
+    card->driver->recv_pending = grub_net_generic_recv_pending;
+
   grub_list_push (GRUB_AS_LIST_P (&grub_net_cards),
 		  GRUB_AS_LIST (card));
 }
