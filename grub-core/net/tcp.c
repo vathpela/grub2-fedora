@@ -139,12 +139,16 @@ struct tcp6_pseudohdr
 static struct grub_net_tcp_socket *tcp_sockets;
 static struct grub_net_tcp_listen *tcp_listens;
 
-#define FOR_TCP_SOCKETS(var) FOR_LIST_ELEMENTS (var, tcp_sockets)
+#define FOR_TCP_SOCKETS(var, next) FOR_LIST_ELEMENTS_SAFE (var, next, tcp_sockets)
 #define FOR_TCP_LISTENS(var) FOR_LIST_ELEMENTS (var, tcp_listens)
 
 #define tcplen(flags) ((grub_ssize_t)(grub_be_to_cpu16 (flags) >> 10))
 #define tcpsize(size) grub_cpu_to_be16_compile_time((size) << 10)
 #define pktlen(nb) ((grub_ssize_t)((nb)->tail - (nb)->data))
+#define my_seq(sock, seqnr) ((seqnr) - ((sock)->my_start_seq))
+#define their_seq(sock, seqnr) ((seqnr) - ((sock)->their_start_seq))
+
+#define dbg(fmt, ...) ({grub_uint64_t _now = grub_get_time_ms(); grub_dprintf("tcp", "%lu.%lu " fmt, _now / 1000, _now % 1000, ## __VA_ARGS__);})
 
 static void
 destroy_pq (grub_net_tcp_socket_t sock)
@@ -399,11 +403,11 @@ reset (grub_net_tcp_socket_t sock)
 void
 grub_net_tcp_retransmit (void)
 {
-  grub_net_tcp_socket_t sock;
+  grub_net_tcp_socket_t sock, next_sock;
   grub_uint64_t ctime = grub_get_time_ms ();
   grub_uint64_t limit_time = ctime - TCP_RETRANSMISSION_TIMEOUT;
 
-  FOR_TCP_SOCKETS (sock)
+  FOR_TCP_SOCKETS (sock, next_sock)
     {
       struct unacked *unack;
       for (unack = sock->unack_first; unack; unack = unack->next)
@@ -428,6 +432,8 @@ grub_net_tcp_retransmit (void)
 	  if ((tcph->flags & TCP_ACK)
 	      && tcph->ack != grub_cpu_to_be32 (sock->their_cur_seq))
 	    {
+	      dbg ("retransmitting previous ack %u\n",
+		   grub_be_to_cpu32 (tcph->ack));
 	      tcph->checksum = grub_net_ip_transport_checksum (unack->nb,
 							       GRUB_NET_IP_TCP,
 							       &sock->inf->address,
@@ -743,6 +749,7 @@ grub_net_send_tcp_packet (const grub_net_tcp_socket_t socket,
       if (err)
 	return err;
 
+      dbg ("acking %u\n", their_seq(socket, socket->their_cur_seq));
       err = tcp_send (nb2, socket);
       if (err)
 	return err;
@@ -752,6 +759,7 @@ grub_net_send_tcp_packet (const grub_net_tcp_socket_t socket,
   if (err)
     return err;
 
+  dbg ("acking+push %u\n", their_seq (socket, socket->their_cur_seq));
   tcph = (struct tcphdr *) nb->data;
   tcph->ack = grub_cpu_to_be32 (socket->their_cur_seq);
   tcph->flags = tcpsize (sizeof *tcph) | TCP_ACK | (push ? TCP_PSH : 0);
@@ -760,13 +768,140 @@ grub_net_send_tcp_packet (const grub_net_tcp_socket_t socket,
   return tcp_send (nb, socket);
 }
 
+
+static grub_err_t
+grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
+{
+  struct grub_net_buff **nb_top_p;
+  grub_err_t err = GRUB_ERR_NONE;
+  int do_ack = 0;
+  int just_closed = 0;
+
+  while ((nb_top_p = grub_priority_queue_top (sock->pq)) != NULL)
+    {
+      struct grub_net_buff *nb_top = *nb_top_p;
+      struct tcphdr *tcph;
+      grub_uint32_t seqnr;
+      grub_ssize_t len, hdrlen;
+
+      tcph = (struct tcphdr *) nb_top->data;
+      seqnr = grub_be_to_cpu32 (tcph->seqnr);
+      hdrlen = tcplen (tcph->flags);
+      len = pktlen (nb_top) - hdrlen;
+
+      dbg ("processing nb with seqnr %u\n", their_seq (sock, seqnr));
+
+      /* If we have seen this sequence already, just remove it */
+      if (seqnr < sock->their_cur_seq)
+	{
+	  dbg ("Ignoring already acked packet %u\n", their_seq (sock, seqnr));
+	  grub_netbuff_free (nb_top);
+	  grub_priority_queue_pop (sock->pq);
+	  continue;
+	}
+
+      /* If we've got an out-of-order packet, we need to re-ack to make sure
+       * the sender is up to date, and our packet queue is basically bad. */
+      if (seqnr > sock->their_cur_seq)
+	{
+	  dbg ("OOO %u, expected %u moving on\n",
+	       their_seq(sock, seqnr), their_seq(sock, sock->their_cur_seq));
+
+	  do_ack = 1;
+	  grub_netbuff_free (nb_top);
+	  grub_priority_queue_pop (sock->pq);
+	  continue;
+	}
+
+      /* If we called close and there's more data (not just empty ACKs and
+       * whatnot), send a reset. */
+      if (sock->i_reseted && len > 0)
+	{
+	  dbg ("i_reseted and there's %u bytes of data\n",
+	       their_seq (sock, seqnr));
+	  reset (sock);
+	}
+
+      /* If we got here, we're actually consuming the packet, so it's safe to
+       * remove it from our ingress queue. */
+      grub_priority_queue_pop (sock->pq);
+
+      /* Eat the header.  If that somehow fails we have no hope of recovery,
+       * so send a reset and get out of here. */
+      err = grub_netbuff_pull (nb_top, hdrlen);
+      if (err)
+	{
+	  sock->i_reseted = 1;
+	  reset (sock);
+	  break;
+	}
+
+      sock->their_cur_seq += len;
+      dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
+
+      /* If we get a FIN it's over. */
+      if (tcph->flags & TCP_FIN)
+	{
+	  sock->they_closed = 1;
+	  just_closed = 1;
+	  sock->their_cur_seq++;
+	  dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
+	  // XXX FIXME ack (sock);
+	  // XXX FIXME do_ack = 1;
+	  ack (sock);
+	  do_ack = 0;
+	}
+
+      /* If there is data, puts packet in socket list. */
+      if (len > 0)
+	{
+	  grub_net_put_packet (&sock->packs, nb_top);
+	  do_ack = 1;
+	}
+      else
+	grub_netbuff_free (nb_top);
+    }
+
+  /* If we got here, there's nothing we can process in the queue, and it's
+   * all bad.  Flush it down the drain. */
+  while ((nb_top_p = grub_priority_queue_top (sock->pq)) != NULL)
+    {
+      struct grub_net_buff *nb_top = *nb_top_p;
+      grub_netbuff_free (nb_top);
+      grub_priority_queue_pop (sock->pq);
+    }
+
+  if (do_ack)
+    {
+      dbg ("acking %u\n", their_seq (sock, sock->their_cur_seq));
+      ack (sock);
+    }
+
+  /* Now feed our packet data to our real consumer. */
+  while (sock->packs.first)
+    {
+      struct grub_net_buff *nb = sock->packs.first->nb;
+      if (sock->recv_hook)
+	sock->recv_hook (sock, sock->packs.first->nb, sock->hook_data);
+      else
+	grub_netbuff_free (nb);
+      grub_net_remove_packet (sock->packs.first);
+    }
+
+  /* And if we closed, inform them of that as well. */
+  if (sock->fin_hook && just_closed)
+    sock->fin_hook (sock, sock->hook_data);
+
+  return err;
+}
+
 grub_err_t
 grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 			  struct grub_net_network_level_interface *inf,
 			  const grub_net_network_level_address_t *source)
 {
   struct tcphdr *tcph;
-  grub_net_tcp_socket_t sock;
+  grub_net_tcp_socket_t sock, next_sock;
   grub_err_t err;
   grub_ssize_t len, hdrlen;
 
@@ -796,7 +931,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
       return GRUB_ERR_NONE;
     }
 
-  FOR_TCP_SOCKETS (sock)
+  FOR_TCP_SOCKETS (sock, next_sock)
     {
       if (!(grub_be_to_cpu16 (tcph->dst) == sock->in_port
 	    && grub_be_to_cpu16 (tcph->src) == sock->out_port
@@ -824,10 +959,19 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  tcph->checksum = chk;
 	}
 
+      /* We do this here just to make the next debug log messages coherent */
+      if (tcph->flags & TCP_SYN && tcph->flags & TCP_ACK && !sock->established)
+	sock->their_start_seq = grub_be_to_cpu32 (tcph->seqnr);
+
+      dbg ("ingress seq %u ack %u len=%ld\n",
+	   their_seq (sock, grub_be_to_cpu32 (tcph->seqnr)),
+	   my_seq (sock, grub_be_to_cpu32 (tcph->ack)), len);
+
       if (tcph->flags & TCP_SYN && tcph->flags & TCP_ACK && !sock->established)
 	{
-	  sock->their_start_seq = grub_be_to_cpu32 (tcph->seqnr);
+	  dbg ("their starting sequence is %u\n", sock->their_start_seq);
 	  sock->their_cur_seq = sock->their_start_seq + 1;
+	  dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
 	  sock->established = 1;
 	}
 
@@ -839,11 +983,15 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  return GRUB_ERR_NONE;
 	}
 
+      /*
+       * If we see an ACK here, we can get rid of our old unacked packets.
+       */
       if (tcph->flags & TCP_ACK)
 	{
 	  struct unacked *unack, *next;
 	  grub_uint32_t acked = grub_be_to_cpu32 (tcph->ack);
 
+	  dbg ("looking for unacked packet %u\n", my_seq (sock, acked));
 	  for (unack = sock->unack_first; unack; unack = next)
 	    {
 	      grub_uint32_t seqnr;
@@ -860,6 +1008,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	      if (seqnr > acked)
 		break;
 
+	      dbg ("freeing unack %u\n", my_seq (sock, acked));
 	      grub_netbuff_free (unack->nb);
 	      grub_free (unack);
 	    }
@@ -881,6 +1030,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  reset (sock);
 	}
 
+      dbg ("adding %" PRIuGRUB_SIZE " to priority queue\n", len);
       err = grub_priority_queue_push (sock->pq, &nb);
       if (err)
 	{
@@ -888,81 +1038,14 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  return err;
 	}
 
-      {
-	struct grub_net_buff **nb_top_p, *nb_top;
-	int do_ack = 0;
-	int just_closed = 0;
-	while (1)
-	  {
-	    nb_top_p = grub_priority_queue_top (sock->pq);
-	    if (!nb_top_p)
-	      return GRUB_ERR_NONE;
-	    nb_top = *nb_top_p;
-	    tcph = (struct tcphdr *) nb_top->data;
-	    if (grub_be_to_cpu32 (tcph->seqnr) >= sock->their_cur_seq)
-	      break;
-	    grub_netbuff_free (nb_top);
-	    grub_priority_queue_pop (sock->pq);
-	  }
-	if (grub_be_to_cpu32 (tcph->seqnr) != sock->their_cur_seq)
-	  {
-	    ack (sock);
-	    return GRUB_ERR_NONE;
-	  }
-	while (1)
-	  {
-	    nb_top_p = grub_priority_queue_top (sock->pq);
-	    if (!nb_top_p)
-	      break;
-	    nb_top = *nb_top_p;
-	    tcph = (struct tcphdr *) nb_top->data;
-
-	    if (grub_be_to_cpu32 (tcph->seqnr) != sock->their_cur_seq)
-	      break;
-	    grub_priority_queue_pop (sock->pq);
-
-	    err = grub_netbuff_pull (nb_top, hdrlen);
-	    if (err)
-	      {
-		grub_netbuff_free (nb_top);
-		return err;
-	      }
-
-	    sock->their_cur_seq += len;
-	    if (tcph->flags & TCP_FIN)
-	      {
-		sock->they_closed = 1;
-		just_closed = 1;
-		sock->their_cur_seq++;
-		do_ack = 1;
-	      }
-	    /* If there is data, puts packet in socket list. */
-	    if (len > 0)
-	      {
-		grub_net_put_packet (&sock->packs, nb_top);
-		do_ack = 1;
-	      }
-	    else
-	      grub_netbuff_free (nb);
-	  }
-	if (do_ack)
-	  ack (sock);
-	while (sock->packs.first)
-	  {
-	    nb = sock->packs.first->nb;
-	    if (sock->recv_hook)
-	      sock->recv_hook (sock, sock->packs.first->nb, sock->hook_data);
-	    else
-	      grub_netbuff_free (nb);
-	    grub_net_remove_packet (sock->packs.first);
-	  }
-
-	if (sock->fin_hook && just_closed)
-	  sock->fin_hook (sock, sock->hook_data);
-      }
-
-      return GRUB_ERR_NONE;
+      dbg ("processing queue\n");
+      return grub_net_tcp_process_queue (sock);
     }
+
+  /*
+   * If it wasn't one of our outbound sockets, it must be one of our listens,
+   * or a phantom.
+   */
   if (tcph->flags & TCP_SYN)
     {
       grub_net_tcp_listen_t listen;
