@@ -1331,13 +1331,6 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	    sock->unack_last = NULL;
 	}
 
-      if (grub_be_to_cpu32 (tcph->seqnr) < sock->their_cur_seq)
-	{
-	  ack (sock);
-	  grub_netbuff_free (nb);
-	  return GRUB_ERR_NONE;
-	}
-
       if (sock->i_reseted && len > 0)
 	{
 	  reset (sock);
