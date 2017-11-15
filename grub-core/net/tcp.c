@@ -146,6 +146,39 @@ static struct grub_net_tcp_listen *tcp_listens;
 #define tcpsize(size) grub_cpu_to_be16_compile_time((size) << 10)
 #define pktlen(nb) ((grub_ssize_t)((nb)->tail - (nb)->data))
 
+static void
+destroy_pq (grub_net_tcp_socket_t sock)
+{
+  struct grub_net_buff **nb_p;
+  while ((nb_p = grub_priority_queue_top (sock->pq)))
+    {
+      grub_netbuff_free (*nb_p);
+      grub_priority_queue_pop (sock->pq);
+    }
+
+  grub_priority_queue_destroy (sock->pq);
+}
+
+static void
+destroy_socket (grub_net_tcp_socket_t socket)
+{
+  struct unacked *unack, *next;
+
+  for (unack = socket->unack_first; unack; unack = next)
+    {
+      next = unack->next;
+      grub_netbuff_free (unack->nb);
+      grub_free (unack);
+    }
+
+  socket->unack_first = NULL;
+  socket->unack_last = NULL;
+
+  grub_list_remove (GRUB_AS_LIST (socket));
+  destroy_pq (socket);
+  grub_free (socket);
+}
+
 grub_net_tcp_listen_t
 grub_net_tcp_listen (grub_uint16_t port,
 		     const struct grub_net_network_level_interface *inf,
@@ -182,20 +215,10 @@ tcp_socket_register (grub_net_tcp_socket_t sock)
 static void
 error (grub_net_tcp_socket_t sock)
 {
-  struct unacked *unack, *next;
-
   if (sock->error_hook)
     sock->error_hook (sock, sock->hook_data);
 
-  for (unack = sock->unack_first; unack; unack = next)
-    {
-      next = unack->next;
-      grub_netbuff_free (unack->nb);
-      grub_free (unack);
-    }
-
-  sock->unack_first = NULL;
-  sock->unack_last = NULL;
+  destroy_socket (sock);
 }
 
 static grub_err_t
@@ -485,19 +508,6 @@ cmp (const void *a__, const void *b__)
   return 0;
 }
 
-static void
-destroy_pq (grub_net_tcp_socket_t sock)
-{
-  struct grub_net_buff **nb_p;
-  while ((nb_p = grub_priority_queue_top (sock->pq)))
-    {
-      grub_netbuff_free (*nb_p);
-      grub_priority_queue_pop (sock->pq);
-    }
-
-  grub_priority_queue_destroy (sock->pq);
-}
-
 grub_err_t
 grub_net_tcp_accept (grub_net_tcp_socket_t sock,
 		     grub_err_t (*recv_hook) (grub_net_tcp_socket_t sock,
@@ -662,8 +672,7 @@ grub_net_tcp_open (char *server,
 				     GRUB_NET_IP_TCP);
       if (err)
 	{
-	  grub_list_remove (GRUB_AS_LIST (socket));
-	  grub_free (socket);
+	  destroy_socket (socket);
 	  grub_netbuff_free (nb);
 	  return NULL;
 	}
@@ -675,17 +684,14 @@ grub_net_tcp_open (char *server,
     }
   if (!socket->established)
     {
-      grub_list_remove (GRUB_AS_LIST (socket));
       if (socket->they_reseted)
 	grub_error (GRUB_ERR_NET_PORT_CLOSED,
 		    N_("connection refused"));
       else
 	grub_error (GRUB_ERR_NET_NO_ANSWER,
 		    N_("connection timeout"));
-
+      destroy_socket (socket);
       grub_netbuff_free (nb);
-      destroy_pq (socket);
-      grub_free (socket);
       return NULL;
     }
 
