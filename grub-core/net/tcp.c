@@ -63,6 +63,7 @@ struct grub_net_tcp_socket
   int they_reseted;
   int i_reseted;
   int i_stall;
+  int they_push;
   grub_uint32_t my_start_seq;
   grub_uint32_t my_cur_seq;
   grub_uint32_t their_start_seq;
@@ -70,6 +71,7 @@ struct grub_net_tcp_socket
   grub_uint16_t my_window;
   grub_uint8_t my_window_scale;
   grub_uint64_t their_window;
+  grub_uint32_t queue_bytes;
   struct unacked *unack_first;
   struct unacked *unack_last;
   grub_err_t (*recv_hook) (grub_net_tcp_socket_t sock, struct grub_net_buff *nb,
@@ -1065,6 +1067,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	  dbg ("Ignoring already acked packet %u\n", their_seq (sock, seqnr));
 	  grub_netbuff_free (nb_top);
 	  grub_priority_queue_pop (sock->pq);
+	  sock->queue_bytes -= len;
 	  continue;
 	}
 
@@ -1075,6 +1078,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	  dbg ("OOO %u, expected %u moving on\n",
 	       their_seq(sock, seqnr), their_seq(sock, sock->their_cur_seq));
 	  do_ack = 1;
+	  sock->queue_bytes -= len;
 	  break;
 	}
 
@@ -1090,6 +1094,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
       /* If we got here, we're actually consuming the packet, so it's safe to
        * remove it from our ingress queue. */
       grub_priority_queue_pop (sock->pq);
+      sock->queue_bytes -= len;
 
       /* Eat the header.  If that somehow fails we have no hope of recovery,
        * so send a reset and get out of here. */
@@ -1250,6 +1255,10 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  ack (sock);
 	}
 
+      if (tcph->flags & TCP_PSH)
+	sock->they_push = 1;
+
+      sock->their_window = grub_be_to_cpu16 (tcph->window);
       FOR_TCP_OPTIONS (tcph, opt)
 	{
 	  struct tcp_scale_opt *scale;
@@ -1343,6 +1352,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	      grub_netbuff_free (nb);
 	      return err;
 	    }
+	  sock->queue_bytes += len;
 	}
       else
 	{
@@ -1351,6 +1361,8 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 
       if (fin)
 	dbg ("saw a FIN, processing queue\n");
+      else if (sock->queue_bytes && sock->they_push)
+	dbg ("they pushed, processing queue\n");
       else if (recv_pending (inf))
 	{
 	  dbg ("recv was pending; not processing queue\n");
