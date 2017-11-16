@@ -168,6 +168,9 @@ static struct grub_net_tcp_listen *tcp_listens;
        (opt) = (struct tcp_opt *)((char *)(opt) +			    \
 				  ((opt)->kind == 1 ? 1 : ((opt)->length))))
 
+static void
+grub_net_tcp_flush_recv_queue (grub_net_tcp_socket_t sock);
+
 static inline grub_uint64_t
 minimum_window (grub_net_tcp_socket_t sock)
 {
@@ -525,6 +528,7 @@ error:
       tcph_ack->flags = tcpsize (hdrsize) | TCP_RST;
       tcph_ack->window = grub_cpu_to_be16_compile_time (0);
       reset_window (sock);
+      grub_net_tcp_flush_recv_queue (sock);
     }
   else
     {
@@ -1019,6 +1023,18 @@ grub_net_send_tcp_packet (const grub_net_tcp_socket_t socket,
   return tcp_send (nb, socket);
 }
 
+static void
+grub_net_tcp_flush_recv_queue (grub_net_tcp_socket_t sock)
+{
+  struct grub_net_buff **nb_top_p;
+
+  while ((nb_top_p = grub_priority_queue_top (sock->pq)) != NULL)
+    {
+      struct grub_net_buff *nb_top = *nb_top_p;
+      grub_netbuff_free (nb_top);
+      grub_priority_queue_pop (sock->pq);
+    }
+}
 
 static grub_err_t
 grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
@@ -1052,16 +1068,13 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	}
 
       /* If we've got an out-of-order packet, we need to re-ack to make sure
-       * the sender is up to date, and our packet queue is basically bad. */
+       * the sender is up to date, and our packet queue is invalid. */
       if (seqnr > sock->their_cur_seq)
 	{
 	  dbg ("OOO %u, expected %u moving on\n",
 	       their_seq(sock, seqnr), their_seq(sock, sock->their_cur_seq));
-
 	  do_ack = 1;
-	  grub_netbuff_free (nb_top);
-	  grub_priority_queue_pop (sock->pq);
-	  continue;
+	  break;
 	}
 
       /* If we called close and there's more data (not just empty ACKs and
@@ -1082,6 +1095,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
       err = grub_netbuff_pull (nb_top, hdrlen);
       if (err)
 	{
+	  dbg ("grub_netbuff_pull() failed: %d\n", err);
 	  sock->i_reseted = 1;
 	  reset (sock);
 	  break;
@@ -1115,12 +1129,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 
   /* If we got here, there's nothing we can process in the queue, and it's
    * all bad.  Flush it down the drain. */
-  while ((nb_top_p = grub_priority_queue_top (sock->pq)) != NULL)
-    {
-      struct grub_net_buff *nb_top = *nb_top_p;
-      grub_netbuff_free (nb_top);
-      grub_priority_queue_pop (sock->pq);
-    }
+  grub_net_tcp_flush_recv_queue (sock);
 
   if (do_ack)
     {
