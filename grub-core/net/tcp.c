@@ -1108,6 +1108,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 
       sock->their_cur_seq += len;
       dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
+      adjust_window (sock, len);
 
       /* If we get a FIN it's over. */
       if (tcph->flags & TCP_FIN)
@@ -1343,6 +1344,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 		      (tcph->flags & TCP_FIN) ?
 		        "ACK|FIN" : "ACK" : "FIN");
 
+	  adjust_window (sock, -len);
 	  err = grub_priority_queue_push (sock->pq, &nb);
 	  if (err)
 	    {
@@ -1362,6 +1364,12 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	dbg ("saw a FIN, processing queue\n");
       else if (sock->queue_bytes && sock->they_push)
 	dbg ("they pushed, processing queue\n");
+      else if (sock->queue_bytes && my_window (sock) < 0x500)
+	dbg ("recv window low, processing queue (%d < 16384)\n",
+	     my_window (sock));
+      else if (my_window (sock) < 0x500)
+	dbg ("recv window low (%d < 16384) but nothing in the queue?\n",
+	     my_window (sock));
       else if (recv_pending (inf))
 	{
 	  dbg ("recv was pending; not processing queue\n");
