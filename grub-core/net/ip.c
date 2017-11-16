@@ -457,6 +457,7 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
 	err = grub_netbuff_unput (nb, actual_size - expected_size);
 	if (err)
 	  {
+	    grub_dprintf ("net", "grub_netbuff_unput() = %d\n", err);
 	    grub_netbuff_free (nb);
 	    return err;
 	  }
@@ -482,6 +483,7 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
 				    * sizeof (grub_uint32_t)));
       if (err)
 	{
+	  grub_dprintf ("net", "grub_netbuff_pull() = %d\n", err);
 	  grub_netbuff_free (nb);
 	  return err;
 	}
@@ -492,8 +494,11 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
       dest.type = GRUB_NET_NETWORK_LEVEL_PROTOCOL_IPV4;
       dest.ipv4 = iph->dest;
 
-      return handle_dgram (nb, card, src_hwaddress, hwaddress, iph->protocol,
+      err = handle_dgram (nb, card, src_hwaddress, hwaddress, iph->protocol,
 			   &source, &dest, iph->ttl);
+      if (err)
+	grub_dprintf ("net", "handle_dgram() = %d\n", err);
+      return err;
     }
 
   for (prev = &reassembles, rsm = *prev; rsm; prev = &rsm->next, rsm = *prev)

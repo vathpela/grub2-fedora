@@ -133,7 +133,11 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
 
   err = grub_netbuff_pull (nb, etherhdr_size);
   if (err)
-    return err;
+    {
+      grub_dprintf ("net", "nb len %lu grub_netbuff_pull (nb, %d) = %d\n",
+		    nb->data - nb->tail, etherhdr_size, err);
+      return err;
+    }
 
   if (type <= 1500)
     {
@@ -144,7 +148,12 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
 	{
 	  err = grub_netbuff_pull (nb, sizeof (*llch));
 	  if (err)
-	    return err;
+	    {
+	      grub_dprintf ("net",
+			    "nb len %lu grub_netbuff_pull (nb, %lu) = %d\n",
+			    nb->data - nb->tail, sizeof (*llch), err);
+	      return err;
+	    }
 	  snaph = (struct snaphdr *) nb->data;
 	  type = snaph->type;
 	}
@@ -160,7 +169,12 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
       /* IP packet.  */
     case GRUB_NET_ETHERTYPE_IP:
     case GRUB_NET_ETHERTYPE_IP6:
-      return grub_net_recv_ip_packets (nb, card, &hwaddress, &src_hwaddress);
+      err = grub_net_recv_ip_packets (nb, card, &hwaddress, &src_hwaddress);
+      if (err)
+	grub_dprintf ("net",
+		      "nb len %ld grub_net_recv_ip_packets(nb,...) = %d\n",
+		      nb->data - nb->tail, err);
+      return err;
     }
   grub_netbuff_free (nb);
   return GRUB_ERR_NONE;
