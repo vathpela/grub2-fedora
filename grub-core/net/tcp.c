@@ -1155,6 +1155,17 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
   return err;
 }
 
+static int
+recv_pending (struct grub_net_network_level_interface *inf)
+{
+  int rc;
+
+  rc = inf->card->driver->recv_pending (inf->card);
+  if (rc < 1)
+    return 0;
+  return rc;
+}
+
 grub_err_t
 grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 			  struct grub_net_network_level_interface *inf,
@@ -1194,7 +1205,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
   FOR_TCP_SOCKETS (sock, next_sock)
     {
       struct tcp_opt *opt;
-
+      int fin = 0;
       if (!(grub_be_to_cpu16 (tcph->dst) == sock->in_port
 	    && grub_be_to_cpu16 (tcph->src) == sock->out_port
 	    && inf == sock->inf
@@ -1309,12 +1320,40 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  reset (sock);
 	}
 
-      dbg ("adding %" PRIuGRUB_SIZE " to priority queue\n", len);
-      err = grub_priority_queue_push (sock->pq, &nb);
-      if (err)
+      if ((tcph->flags & TCP_ACK && len > 0)
+	  || !(tcph->flags & TCP_ACK)
+	  || tcph->flags & TCP_FIN)
 	{
-	  grub_netbuff_free (nb);
-	  return err;
+	  if (tcph->flags & TCP_FIN)
+	    fin = 1;
+	  if (len > 0)
+	    dbg ("adding %" PRIuGRUB_SIZE " to priority queue\n", len);
+	  else if (tcph->flags & TCP_ACK || tcph->flags & TCP_FIN)
+	    dbg ("adding %s packet to priority queue\n",
+		    (tcph->flags & TCP_ACK) ?
+		      (tcph->flags & TCP_FIN) ?
+		        "ACK|FIN" : "ACK" : "FIN");
+
+	  err = grub_priority_queue_push (sock->pq, &nb);
+	  if (err)
+	    {
+	      grub_dprintf ("tcp", "grub_priority_queue_push() returned %d\n",
+			    err);
+	      grub_netbuff_free (nb);
+	      return err;
+	    }
+	}
+      else
+	{
+	  dbg ("not queueing empty packet.\n");
+	}
+
+      if (fin)
+	dbg ("saw a FIN, processing queue\n");
+      else if (recv_pending (inf))
+	{
+	  dbg ("recv was pending; not processing queue\n");
+	  return GRUB_ERR_NONE;
 	}
 
       dbg ("processing queue\n");
