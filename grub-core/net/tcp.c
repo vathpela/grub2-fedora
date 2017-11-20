@@ -68,6 +68,7 @@ struct grub_net_tcp_socket
   grub_uint32_t my_cur_seq;
   grub_uint32_t their_start_seq;
   grub_uint32_t their_cur_seq;
+  grub_uint32_t last_ack_seq;
   grub_uint16_t my_window;
   grub_uint8_t my_window_scale;
   grub_uint64_t their_window;
@@ -540,6 +541,9 @@ error:
       err = add_padding (nb_ack, tcph_ack, &hdrsize);
       if (err)
 	goto error;
+
+      sock->last_ack_seq = sock->their_cur_seq;
+      sock->last_ack_ms = grub_get_time_ms ();
     }
 
   if (res)
@@ -576,7 +580,10 @@ error:
 static void
 ack (grub_net_tcp_socket_t sock)
 {
-  sock->last_ack_ms = grub_get_time_ms ();
+  grub_uint64_t now = grub_get_time_ms ();
+  if (sock->their_cur_seq == sock->last_ack_seq &&
+      now - sock->last_ack_ms < 500)
+    return;
   ack_real (sock, 0, 1);
 }
 
