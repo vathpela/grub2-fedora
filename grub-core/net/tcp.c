@@ -1170,6 +1170,12 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	grub_netbuff_free (nb_top);
     }
 
+  if (sock->they_push && sock->i_stall == 1 && !grub_priority_queue_top (sock->pq))
+    {
+      sock->i_stall = 0;
+      sock->they_push = 0;
+    }
+
   /* If we got here, there's nothing we can process in the queue, and it's
    * all bad.  Flush it down the drain. */
   grub_net_tcp_flush_recv_queue (sock);
@@ -1299,7 +1305,10 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	}
 
       if (tcph->flags & TCP_PSH)
-	sock->they_push = 1;
+	{
+	  sock->i_stall = 1;
+	  sock->they_push = 1;
+	}
 
       FOR_TCP_OPTIONS (tcph, opt)
 	{
@@ -1415,6 +1424,11 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  return GRUB_ERR_NONE;
 	}
 
+      if (ms - sock->last_ack_ms > 2000)
+	{
+	  sock->i_stall = 1;
+	  ack_real (sock, 0, 1);
+	}
       dbg ("processing queue\n");
       return grub_net_tcp_process_queue (sock);
     }
