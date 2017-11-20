@@ -173,6 +173,8 @@ static struct grub_net_tcp_listen *tcp_listens;
 
 static void
 grub_net_tcp_flush_recv_queue (grub_net_tcp_socket_t sock);
+static grub_err_t
+grub_net_tcp_process_queue (grub_net_tcp_socket_t sock);
 
 static inline grub_uint64_t
 minimum_window (grub_net_tcp_socket_t sock)
@@ -447,6 +449,8 @@ grub_net_tcp_close (grub_net_tcp_socket_t sock,
       sock->error_hook = NULL;
       sock->fin_hook = NULL;
     }
+  else
+    grub_net_tcp_process_queue (sock);
 
   if (discard_received == GRUB_NET_TCP_ABORT)
     sock->i_reseted = 1;
