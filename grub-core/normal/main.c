@@ -343,7 +343,9 @@ grub_try_normal (const char *variable)
     if (!prefix)
       return GRUB_ERR_FILE_NOT_FOUND;
 
-    if (grub_strncmp (prefix + 1, "tftp", sizeof ("tftp") - 1) == 0)
+    if (grub_strncmp (prefix + 1, "tftp", sizeof ("tftp") - 1) == 0
+        || grub_strncmp (prefix + 1, "http", sizeof ("http") - 1) == 0
+        || grub_strncmp (prefix + 1, "https", sizeof ("https") - 1) == 0)
       {
 	grub_size_t config_len;
 	config_len = grub_strlen (prefix) +
