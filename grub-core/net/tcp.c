@@ -544,20 +544,28 @@ error:
 
       sock->last_ack_seq = sock->their_cur_seq;
       sock->last_ack_ms = grub_get_time_ms ();
+
+      tcph_ack->window = !sock->i_stall ? grub_cpu_to_be16 (sock->my_window)
+	: 0;
+    }
+  else
+    {
+      tcph_ack->window = 0;
     }
 
   if (res)
     {
       tcph_ack->ack = grub_cpu_to_be32_compile_time (0);
-      tcph_ack->flags = tcpsize (hdrsize) | TCP_RST;
-      tcph_ack->window = grub_cpu_to_be16_compile_time (0);
+      tcph_ack->flags = tcpsize (hdrsize) | TCP_RST
+		        | (ack ? TCP_ACK : 0);
       reset_window (sock);
       grub_net_tcp_flush_recv_queue (sock);
     }
   else
     {
       tcph_ack->ack = grub_cpu_to_be32 (sock->their_cur_seq);
-      tcph_ack->flags = tcpsize (hdrsize) | TCP_ACK;
+      tcph_ack->flags = tcpsize (hdrsize) | TCP_ACK
+			| (sock->they_closed ? TCP_FIN : 0);
       if (sock->they_closed && !sock->i_closed)
 	{
 	  tcph_ack->flags |= TCP_FIN;
@@ -566,6 +574,7 @@ error:
       tcph_ack->window = !sock->i_stall ? grub_cpu_to_be16 (sock->my_window)
 	: 0;
     }
+
   tcph_ack->urgent = 0;
   tcph_ack->src = grub_cpu_to_be16 (sock->in_port);
   tcph_ack->dst = grub_cpu_to_be16 (sock->out_port);
@@ -1098,8 +1107,14 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	{
 	  dbg ("OOO %u, expected %u moving on\n",
 	       their_seq(sock, seqnr), their_seq(sock, sock->their_cur_seq));
-	  do_ack = 1;
-	  sock->queue_bytes -= len;
+	  if (their_seq (sock, seqnr) >> 4 >
+	      their_seq (sock, sock->their_cur_seq))
+	      reset (sock, 1);
+	  else
+	    {
+	      do_ack = 1;
+	      sock->queue_bytes -= len;
+	    }
 	  break;
 	}
 
