@@ -1227,6 +1227,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  sock->their_cur_seq = sock->their_start_seq + 1;
 	  dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
 	  sock->established = 1;
+	  ack (sock);
 	}
 
       FOR_TCP_OPTIONS (tcph, opt)
