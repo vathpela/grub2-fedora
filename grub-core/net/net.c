@@ -1900,9 +1900,15 @@ grub_net_search_configfile (char *config)
     {
       /* By the Client UUID. */
 
-      char client_uuid_var[sizeof ("net_") + grub_strlen (inf->name) +
-                           sizeof ("_clientuuid") + 1];
-      grub_snprintf (client_uuid_var, sizeof (client_uuid_var),
+      char *client_uuid_var;
+      grub_size_t client_uuid_size;
+
+      client_uuid_size = sizeof ("net_") + grub_strlen (inf->name)
+			 + sizeof ("_clientuuid") + 1;
+      client_uuid_var = grub_malloc (client_uuid_size);
+      if (!client_uuid_var)
+	continue;
+      grub_snprintf (client_uuid_var, client_uuid_size,
                      "net_%s_clientuuid", inf->name);
 
       const char *client_uuid;
