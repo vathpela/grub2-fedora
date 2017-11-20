@@ -68,6 +68,8 @@ struct grub_net_tcp_socket
   grub_uint32_t their_start_seq;
   grub_uint32_t their_cur_seq;
   grub_uint16_t my_window;
+  grub_uint8_t my_window_scale;
+  grub_uint64_t their_window;
   struct unacked *unack_first;
   struct unacked *unack_last;
   grub_err_t (*recv_hook) (grub_net_tcp_socket_t sock, struct grub_net_buff *nb,
@@ -108,8 +110,13 @@ struct tcphdr
   grub_uint16_t urgent;
 } GRUB_PACKED;
 
-struct tcp_scale_opt
+struct tcp_opt
 {
+  grub_uint8_t kind;
+  grub_uint8_t length;
+} GRUB_PACKED;
+
+struct tcp_scale_opt {
   grub_uint8_t kind;
   grub_uint8_t length;
   grub_uint8_t scale;
@@ -151,8 +158,77 @@ static struct grub_net_tcp_listen *tcp_listens;
 #define pktlen(nb) ((grub_ssize_t)((nb)->tail - (nb)->data))
 #define my_seq(sock, seqnr) ((seqnr) - ((sock)->my_start_seq))
 #define their_seq(sock, seqnr) ((seqnr) - ((sock)->their_start_seq))
+#define my_window(sock) ((sock)->my_window * (1 << ((sock)->my_window_scale)))
 
 #define dbg(fmt, ...) ({grub_uint64_t _now = grub_get_time_ms(); grub_dprintf("tcp", "%lu.%lu " fmt, _now / 1000, _now % 1000, ## __VA_ARGS__);})
+
+#define FOR_TCP_OPTIONS(tcph, opt)					    \
+  for ((opt) = (struct tcp_opt *)(((char *)tcph) + sizeof (struct tcphdr)); \
+       tcplen((tcph)->flags) > 20 && ((opt)->kind) != 0 ;		    \
+       (opt) = (struct tcp_opt *)((char *)(opt) +			    \
+				  ((opt)->kind == 1 ? 1 : ((opt)->length))))
+
+static inline grub_uint64_t
+minimum_window (grub_net_tcp_socket_t sock)
+{
+  return min(sock->inf->card->mtu, 1500)
+         - GRUB_NET_OUR_IPV4_HEADER_SIZE
+	 - sizeof (struct tcphdr);
+}
+
+static inline void
+adjust_window (grub_net_tcp_socket_t sock, int howmuch)
+{
+  grub_uint64_t scale = 1 << sock->my_window_scale;
+  grub_uint64_t window = sock->my_window;
+  grub_int64_t scaled;
+  grub_uint64_t maximum = 0x8000ULL * (1ULL << 48);
+  grub_uint64_t minimum = minimum_window (sock);
+
+  /* Add our modifier to the total */
+  scaled = window * scale + howmuch;
+  if ((grub_uint64_t)scaled > maximum)
+    scaled = maximum;
+  if (scaled < (grub_int64_t)minimum)
+    scaled = minimum;
+
+  /* and then compute a new window from that */
+  for (scale = 0; scale < 0xff; scale++)
+    if (scaled >> scale < 0xffff)
+      break;
+  window = scaled >> scale;
+
+#if 0
+  grub_dprintf ("tcp-window", "window: %u scale: %u\n", window, scale);
+#endif
+  if (scale != sock->my_window_scale || window != sock->my_window)
+    {
+      dbg ("rescaling (howmuch=%d) %u*%u (%x) -> %lu*%u (0x%lx)\n",
+	   howmuch, sock->my_window, 1 << sock->my_window_scale,
+	   sock->my_window * (1 << sock->my_window_scale),
+	   window, 1 << scale, window * (1 << scale));
+      sock->my_window_scale = scale;
+      sock->my_window = window;
+    }
+}
+
+static inline void
+reset_window (grub_net_tcp_socket_t sock)
+{
+  grub_uint64_t scaled;
+  sock->my_window_scale = 0;
+  sock->my_window = 0;
+
+  scaled = min(sock->inf->card->mtu, 1500)
+	   - GRUB_NET_OUR_IPV4_HEADER_SIZE
+	   - sizeof (struct tcphdr);
+  scaled = scaled * 100;
+  scaled = ALIGN_UP(scaled, 4096);
+  adjust_window (sock, scaled);
+  dbg ("Setting window to %u << %u = (%lu)\n",
+       sock->my_window, sock->my_window_scale,
+       (unsigned long)sock->my_window << sock->my_window_scale);
+}
 
 static grub_err_t
 add_window_scale (struct grub_net_buff *nb,
@@ -418,9 +494,10 @@ ack_real (grub_net_tcp_socket_t sock, int res)
 {
   struct grub_net_buff *nb_ack;
   struct tcphdr *tcph_ack;
+  grub_size_t hdrsize = sizeof (*tcph_ack);
   grub_err_t err;
 
-  nb_ack = grub_netbuff_alloc (sizeof (*tcph_ack) + 128);
+  nb_ack = grub_netbuff_alloc (hdrsize + 128);
   if (!nb_ack)
     return;
   err = grub_netbuff_reserve (nb_ack, 128);
@@ -432,7 +509,7 @@ ack_real (grub_net_tcp_socket_t sock, int res)
       return;
     }
 
-  err = grub_netbuff_put (nb_ack, sizeof (*tcph_ack));
+  err = grub_netbuff_put (nb_ack, hdrsize);
   if (err)
     {
       grub_netbuff_free (nb_ack);
@@ -445,11 +522,21 @@ error:
   if (res)
     {
       tcph_ack->ack = grub_cpu_to_be32_compile_time (0);
-      tcph_ack->flags = tcpsize (sizeof *tcph_ack) | TCP_RST;
+      tcph_ack->flags = tcpsize (hdrsize) | TCP_RST;
       tcph_ack->window = grub_cpu_to_be16_compile_time (0);
+      reset_window (sock);
     }
   else
     {
+      err = add_window_scale (nb_ack, tcph_ack, &hdrsize,
+			      sock->my_window_scale);
+      if (err)
+	goto error;
+
+      err = add_padding (nb_ack, tcph_ack, &hdrsize);
+      if (err)
+	goto error;
+
       tcph_ack->ack = grub_cpu_to_be32 (sock->their_cur_seq);
       tcph_ack->flags = tcpsize (sizeof *tcph_ack) | TCP_ACK;
       tcph_ack->window = !sock->i_stall ? grub_cpu_to_be16 (sock->my_window)
@@ -808,8 +895,8 @@ error:
   grub_memset(tcph, 0, sizeof (*tcph));
   socket->my_start_seq = grub_get_time_ms ();
   socket->my_cur_seq = socket->my_start_seq + 1;
-  socket->my_window = 32768;
-  err = add_window_scale (nb, tcph, &hdrsize, 5);
+  reset_window (socket);
+  err = add_window_scale (nb, tcph, &hdrsize, socket->my_window_scale);
   if (err)
     goto error;
   err = add_mss (socket, nb, tcph, &hdrsize);
@@ -1097,6 +1184,8 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 
   FOR_TCP_SOCKETS (sock, next_sock)
     {
+      struct tcp_opt *opt;
+
       if (!(grub_be_to_cpu16 (tcph->dst) == sock->in_port
 	    && grub_be_to_cpu16 (tcph->src) == sock->out_port
 	    && inf == sock->inf
@@ -1137,6 +1226,22 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  sock->their_cur_seq = sock->their_start_seq + 1;
 	  dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
 	  sock->established = 1;
+	}
+
+      FOR_TCP_OPTIONS (tcph, opt)
+	{
+	  struct tcp_scale_opt *scale;
+
+	  dbg ("processing tcph (0x%016lx) option %u (0x%016lx)\n",
+	       (unsigned long)tcph, opt->kind, (unsigned long)opt);
+
+	  if (opt->kind != 3)
+	    continue;
+
+	  scale = (struct tcp_scale_opt *)opt;
+	  sock->their_window = grub_be_to_cpu16 (tcph->window);
+	  sock->their_window <<= scale->scale;
+	  break;
 	}
 
       if (tcph->flags & TCP_RST)
@@ -1230,7 +1335,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  sock->their_start_seq = grub_be_to_cpu32 (tcph->seqnr);
 	  sock->their_cur_seq = sock->their_start_seq + 1;
 	  sock->my_cur_seq = sock->my_start_seq = grub_get_time_ms ();
-	  sock->my_window = 8192;
+	  reset_window (sock);
 
 	  sock->pq = grub_priority_queue_new (sizeof (struct grub_net_buff *),
 					      cmp);
