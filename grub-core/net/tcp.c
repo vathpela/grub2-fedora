@@ -496,7 +496,7 @@ grub_net_tcp_close (grub_net_tcp_socket_t sock,
 }
 
 static void
-ack_real (grub_net_tcp_socket_t sock, int res)
+ack_real (grub_net_tcp_socket_t sock, int res, int ack)
 {
   struct grub_net_buff *nb_ack;
   struct tcphdr *tcph_ack;
@@ -525,6 +525,18 @@ error:
       return;
     }
   tcph_ack = (void *) nb_ack->data;
+  if (ack)
+    {
+      err = add_window_scale (nb_ack, tcph_ack, &hdrsize,
+			      sock->my_window_scale);
+      if (err)
+	goto error;
+
+      err = add_padding (nb_ack, tcph_ack, &hdrsize);
+      if (err)
+	goto error;
+    }
+
   if (res)
     {
       tcph_ack->ack = grub_cpu_to_be32_compile_time (0);
@@ -535,15 +547,6 @@ error:
     }
   else
     {
-      err = add_window_scale (nb_ack, tcph_ack, &hdrsize,
-			      sock->my_window_scale);
-      if (err)
-	goto error;
-
-      err = add_padding (nb_ack, tcph_ack, &hdrsize);
-      if (err)
-	goto error;
-
       tcph_ack->ack = grub_cpu_to_be32 (sock->their_cur_seq);
       tcph_ack->flags = tcpsize (hdrsize) | TCP_ACK;
       if (sock->they_closed && !sock->i_closed)
@@ -569,13 +572,13 @@ static void
 ack (grub_net_tcp_socket_t sock)
 {
   sock->last_ack_ms = grub_get_time_ms ();
-  ack_real (sock, 0);
+  ack_real (sock, 0, 1);
 }
 
 static void
-reset (grub_net_tcp_socket_t sock)
+reset (grub_net_tcp_socket_t sock, int ack)
 {
-  ack_real (sock, 1);
+  ack_real (sock, 1, ack);
 }
 
 void
@@ -1094,7 +1097,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	{
 	  dbg ("i_reseted and there's %u bytes of data\n",
 	       their_seq (sock, seqnr));
-	  reset (sock);
+	  reset (sock, 0);
 	}
 
       /* If we got here, we're actually consuming the packet, so it's safe to
@@ -1109,7 +1112,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	{
 	  dbg ("grub_netbuff_pull() failed: %d\n", err);
 	  sock->i_reseted = 1;
-	  reset (sock);
+	  reset (sock, 0);
 	  break;
 	}
 
@@ -1333,7 +1336,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 
       if (sock->i_reseted && len > 0)
 	{
-	  reset (sock);
+	  reset (sock, 0);
 	}
 
       if ((tcph->flags & TCP_ACK && len > 0)
