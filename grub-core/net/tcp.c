@@ -71,6 +71,7 @@ struct grub_net_tcp_socket
   grub_uint16_t my_window;
   grub_uint8_t my_window_scale;
   grub_uint64_t their_window;
+  grub_uint64_t last_ack_ms;
   grub_uint32_t queue_bytes;
   struct unacked *unack_first;
   struct unacked *unack_last;
@@ -568,6 +569,7 @@ error:
 static void
 ack (grub_net_tcp_socket_t sock)
 {
+  sock->last_ack_ms = grub_get_time_ms ();
   ack_real (sock, 0);
 }
 
@@ -1271,7 +1273,6 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
       if (tcph->flags & TCP_PSH)
 	sock->they_push = 1;
 
-      sock->their_window = grub_be_to_cpu16 (tcph->window);
       FOR_TCP_OPTIONS (tcph, opt)
 	{
 	  struct tcp_scale_opt *scale;
@@ -1366,6 +1367,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  dbg ("not queueing empty packet.\n");
 	}
 
+      grub_uint64_t ms = grub_get_time_ms ();
       if (fin)
 	dbg ("saw a FIN, processing queue\n");
       else if (sock->queue_bytes && sock->they_push)
@@ -1376,6 +1378,9 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
       else if (my_window (sock) < 0x500)
 	dbg ("recv window low (%d < 16384) but nothing in the queue?\n",
 	     my_window (sock));
+      else if (sock->queue_bytes && (ms - sock->last_ack_ms > 500))
+	dbg ("timer expired; must process queue (%lu ms since last ack)\n",
+	     ms - sock->last_ack_ms);
       else if (recv_pending (inf))
 	{
 	  dbg ("recv was pending; not processing queue\n");
