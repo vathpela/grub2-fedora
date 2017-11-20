@@ -106,17 +106,12 @@ struct tcphdr
   grub_uint16_t urgent;
 } GRUB_PACKED;
 
-struct tcp_scale_opt {
+struct tcp_scale_opt
+{
   grub_uint8_t kind;
   grub_uint8_t length;
   grub_uint8_t scale;
 } GRUB_PACKED;
-
-struct tcp_synhdr {
-  struct tcphdr tcphdr;
-  struct tcp_scale_opt scale_opt;
-  grub_uint8_t padding;
-};
 
 struct tcp_pseudohdr
 {
@@ -149,6 +144,51 @@ static struct grub_net_tcp_listen *tcp_listens;
 #define their_seq(sock, seqnr) ((seqnr) - ((sock)->their_start_seq))
 
 #define dbg(fmt, ...) ({grub_uint64_t _now = grub_get_time_ms(); grub_dprintf("tcp", "%lu.%lu " fmt, _now / 1000, _now % 1000, ## __VA_ARGS__);})
+
+static grub_err_t
+add_window_scale (struct grub_net_buff *nb,
+		  struct tcphdr *tcph, grub_size_t *size, int scale_value)
+{
+  struct tcp_scale_opt *scale = (struct tcp_scale_opt *)((char *)tcph + *size);
+  grub_err_t err;
+
+  err = grub_netbuff_put (nb, sizeof (*scale));
+  if (err)
+    {
+      grub_dprintf ("net", "error adding tcp window scale option\n");
+      grub_netbuff_free (nb);
+      return err;
+    }
+
+  scale->kind = 3;
+  scale->length = sizeof (*scale);
+  scale->scale = scale_value;
+  *size += sizeof (*scale);
+  return GRUB_ERR_NONE;
+}
+
+static grub_err_t
+add_padding (struct grub_net_buff *nb,
+	     struct tcphdr *tcph, grub_size_t *size)
+{
+  grub_uint8_t *end = (grub_uint8_t *)((char *)tcph + *size);
+  grub_size_t end_size = 1;
+  grub_err_t err;
+
+  end_size = ALIGN_UP ((*size + 1), 4) - *size;
+
+  err = grub_netbuff_put (nb, end_size);
+  if (err)
+    {
+      grub_dprintf ("net", "error adding tcp mss option\n");
+      grub_netbuff_free (nb);
+      return err;
+    }
+
+  memset (end, 0, end_size);
+  *size += end_size;
+  return GRUB_ERR_NONE;
+}
 
 static void
 destroy_pq (grub_net_tcp_socket_t sock)
@@ -363,6 +403,7 @@ ack_real (grub_net_tcp_socket_t sock, int res)
   if (err)
     {
       grub_netbuff_free (nb_ack);
+error:
       grub_dprintf ("net", "error closing socket\n");
       grub_errno = GRUB_ERR_NONE;
       return;
@@ -552,10 +593,10 @@ grub_net_tcp_accept (grub_net_tcp_socket_t sock,
   err = grub_netbuff_put (nb_ack, sizeof (*tcph));
   if (err)
     {
+error:
       grub_netbuff_free (nb_ack);
       return err;
     }
-  tcph = (void *) nb_ack->data;
   tcph->ack = grub_cpu_to_be32 (sock->their_cur_seq);
   tcph->flags = tcpsize (sizeof *tcph) | TCP_SYN | TCP_ACK;
   tcph->window = grub_cpu_to_be16 (sock->my_window);
@@ -650,10 +691,11 @@ grub_net_tcp_open (char *server,
   grub_net_tcp_socket_t socket;
   static grub_uint16_t in_port;
   struct grub_net_buff *nb;
-  struct tcp_synhdr *tcph;
+  struct tcphdr *tcph;
   int i;
   grub_uint8_t *nbd;
   grub_net_link_level_address_t ll_target_addr;
+  grub_size_t hdrsize = sizeof (*tcph);
 
   err = grub_net_resolve_address (server, &addr);
   if (err)
@@ -707,7 +749,7 @@ grub_net_tcp_open (char *server,
       return NULL;
     }
 
-  err = grub_netbuff_put (nb, sizeof (*tcph));
+  err = grub_netbuff_put (nb, hdrsize);
   if (err)
     {
       grub_netbuff_free (nb);
@@ -716,6 +758,7 @@ grub_net_tcp_open (char *server,
   socket->pq = grub_priority_queue_new (sizeof (struct grub_net_buff *), cmp);
   if (!socket->pq)
     {
+error:
       grub_netbuff_free (nb);
       return NULL;
     }
@@ -725,20 +768,22 @@ grub_net_tcp_open (char *server,
   socket->my_start_seq = grub_get_time_ms ();
   socket->my_cur_seq = socket->my_start_seq + 1;
   socket->my_window = 32768;
-  tcph->tcphdr.seqnr = grub_cpu_to_be32 (socket->my_start_seq);
-  tcph->tcphdr.ack = grub_cpu_to_be32_compile_time (0);
-  tcph->tcphdr.flags = tcpsize (sizeof *tcph) | TCP_SYN;
-  tcph->tcphdr.window = grub_cpu_to_be16 (socket->my_window);
-  tcph->tcphdr.urgent = 0;
-  tcph->tcphdr.src = grub_cpu_to_be16 (socket->in_port);
-  tcph->tcphdr.dst = grub_cpu_to_be16 (socket->out_port);
-  tcph->tcphdr.checksum = 0;
-  tcph->scale_opt.kind = 3;
-  tcph->scale_opt.length = 3;
-  tcph->scale_opt.scale = 5;
-  tcph->tcphdr.checksum = grub_net_ip_transport_checksum (nb, GRUB_NET_IP_TCP,
-							  &socket->inf->address,
-							  &socket->out_nla);
+  err = add_window_scale (nb, tcph, &hdrsize, 5);
+  if (err)
+    goto error;
+  err = add_padding (nb, tcph, &hdrsize);
+  if (err)
+    goto error;
+  tcph->seqnr = grub_cpu_to_be32 (socket->my_start_seq);
+  tcph->ack = grub_cpu_to_be32_compile_time (0);
+  tcph->flags = tcpsize (hdrsize) | TCP_SYN;
+  tcph->window = grub_cpu_to_be16 (socket->my_window);
+  tcph->urgent = 0;
+  tcph->src = grub_cpu_to_be16 (socket->in_port);
+  tcph->dst = grub_cpu_to_be16 (socket->out_port);
+  tcph->checksum = grub_net_ip_transport_checksum (nb, GRUB_NET_IP_TCP,
+						   &socket->inf->address,
+						   &socket->out_nla);
 
   tcp_socket_register (socket);
 
