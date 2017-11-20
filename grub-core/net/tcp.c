@@ -28,6 +28,8 @@
 #define TCP_RETRANSMISSION_TIMEOUT GRUB_NET_INTERVAL
 #define TCP_RETRANSMISSION_COUNT GRUB_NET_TRIES
 
+#define min(x, y) (((x) >= (y)) ? (x) : (y))
+
 struct unacked
 {
   struct unacked *next;
@@ -113,6 +115,13 @@ struct tcp_scale_opt
   grub_uint8_t scale;
 } GRUB_PACKED;
 
+struct tcp_mss_opt
+{
+  grub_uint8_t kind;
+  grub_uint8_t length;
+  grub_uint16_t mss;
+} GRUB_PACKED;
+
 struct tcp_pseudohdr
 {
   grub_uint32_t src;
@@ -164,6 +173,30 @@ add_window_scale (struct grub_net_buff *nb,
   scale->length = sizeof (*scale);
   scale->scale = scale_value;
   *size += sizeof (*scale);
+  return GRUB_ERR_NONE;
+}
+
+static grub_err_t
+add_mss (grub_net_tcp_socket_t sock, struct grub_net_buff *nb,
+	 struct tcphdr *tcph, grub_size_t *size)
+{
+  struct tcp_mss_opt *mss = (struct tcp_mss_opt *)((char *)tcph + *size);
+  grub_err_t err;
+
+  err = grub_netbuff_put (nb, sizeof (*mss));
+  if (err)
+    {
+      grub_dprintf ("net", "error adding tcp mss option\n");
+      grub_netbuff_free (nb);
+      return err;
+    }
+
+  mss->kind = 2;
+  mss->length = sizeof (*mss);
+  mss->mss = grub_cpu_to_be16 (min(sock->inf->card->mtu, 1500)
+			       - GRUB_NET_OUR_IPV4_HEADER_SIZE
+			       - sizeof (struct tcphdr));
+  *size += sizeof (*mss);
   return GRUB_ERR_NONE;
 }
 
@@ -571,6 +604,7 @@ grub_net_tcp_accept (grub_net_tcp_socket_t sock,
 {
   struct grub_net_buff *nb_ack;
   struct tcphdr *tcph;
+  grub_size_t hdrsize = sizeof (*tcph);
   grub_err_t err;
 
   sock->recv_hook = recv_hook;
@@ -590,15 +624,22 @@ grub_net_tcp_accept (grub_net_tcp_socket_t sock,
       return err;
     }
 
-  err = grub_netbuff_put (nb_ack, sizeof (*tcph));
+  err = grub_netbuff_put (nb_ack, hdrsize);
   if (err)
     {
 error:
       grub_netbuff_free (nb_ack);
       return err;
     }
+  tcph = (void *) nb_ack->data;
+  err = add_mss (sock, nb_ack, tcph, &hdrsize);
+  if (err)
+    goto error;
+  err = add_padding (nb_ack, tcph, &hdrsize);
+  if (err)
+    goto error;
   tcph->ack = grub_cpu_to_be32 (sock->their_cur_seq);
-  tcph->flags = tcpsize (sizeof *tcph) | TCP_SYN | TCP_ACK;
+  tcph->flags = tcpsize (hdrsize) | TCP_SYN | TCP_ACK;
   tcph->window = grub_cpu_to_be16 (sock->my_window);
   tcph->urgent = 0;
   sock->established = 1;
@@ -769,6 +810,9 @@ error:
   socket->my_cur_seq = socket->my_start_seq + 1;
   socket->my_window = 32768;
   err = add_window_scale (nb, tcph, &hdrsize, 5);
+  if (err)
+    goto error;
+  err = add_mss (socket, nb, tcph, &hdrsize);
   if (err)
     goto error;
   err = add_padding (nb, tcph, &hdrsize);
