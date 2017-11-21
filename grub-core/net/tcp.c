@@ -176,7 +176,7 @@ static struct grub_net_tcp_listen *tcp_listens;
 static void
 grub_net_tcp_flush_recv_queue (grub_net_tcp_socket_t sock);
 static grub_err_t
-grub_net_tcp_process_queue (grub_net_tcp_socket_t sock);
+grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack);
 
 static inline grub_uint64_t
 minimum_window (grub_net_tcp_socket_t sock)
@@ -452,7 +452,7 @@ grub_net_tcp_close (grub_net_tcp_socket_t sock,
       sock->fin_hook = NULL;
     }
   else
-    grub_net_tcp_process_queue (sock);
+    grub_net_tcp_process_queue (sock, 0);
 
   if (discard_received == GRUB_NET_TCP_ABORT)
     sock->i_reseted = 1;
@@ -1070,7 +1070,7 @@ grub_net_tcp_flush_recv_queue (grub_net_tcp_socket_t sock)
 }
 
 static grub_err_t
-grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
+grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 {
   struct grub_net_buff **nb_top_p;
   grub_err_t err = GRUB_ERR_NONE;
@@ -1090,6 +1090,9 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
       len = pktlen (nb_top) - hdrlen;
 
       dbg ("processing nb with seqnr %u\n", their_seq (sock, seqnr));
+
+      if (force_ack)
+	do_ack = 1;
 
       /* If we have seen this sequence already, just remove it */
       if (seqnr < sock->their_cur_seq)
@@ -1255,7 +1258,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
   FOR_TCP_SOCKETS (sock, next_sock)
     {
       struct tcp_opt *opt;
-      int fin = 0;
+      int fin = 0, force_ack;
       if (!(grub_be_to_cpu16 (tcph->dst) == sock->in_port
 	    && grub_be_to_cpu16 (tcph->src) == sock->out_port
 	    && inf == sock->inf
@@ -1405,6 +1408,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  dbg ("not queueing empty packet.\n");
 	}
 
+      force_ack = 1;
       grub_uint64_t ms = grub_get_time_ms ();
       if (fin)
 	dbg ("saw a FIN, processing queue\n");
@@ -1424,6 +1428,8 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  dbg ("recv was pending; not processing queue\n");
 	  return GRUB_ERR_NONE;
 	}
+      else
+	force_ack = 0;
 
       if (ms - sock->last_ack_ms > 2000)
 	{
@@ -1431,7 +1437,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  ack_real (sock, 0, 1);
 	}
       dbg ("processing queue\n");
-      return grub_net_tcp_process_queue (sock);
+      return grub_net_tcp_process_queue (sock, force_ack);
     }
 
   /*
