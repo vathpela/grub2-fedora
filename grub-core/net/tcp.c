@@ -1183,6 +1183,15 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 	  do_ack = 0;
 	}
 
+      /* If this is near the end of the window, we need to ACK fast. */
+#if 0
+      if (sock->last_ack_seq + sock->their_window + len
+	  > sock->their_cur_seq)
+	do_ack = 1;
+      if (sock->last_ack_seq + my_window (sock) + len > sock->their_cur_seq)
+	do_ack = 1;
+#endif
+
       /* If there is data, puts packet in socket list. */
       if (len > 0)
 	grub_net_put_packet (&sock->packs, nb_top);
