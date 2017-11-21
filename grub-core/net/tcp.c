@@ -544,8 +544,12 @@ error:
 	goto error;
 
       tcph_ack->ack = grub_cpu_to_be32 (sock->their_cur_seq);
-      tcph_ack->flags = tcpsize (hdrsize) | TCP_ACK
-			| (sock->they_closed ? TCP_FIN : 0);
+      tcph_ack->flags = tcpsize (hdrsize) | TCP_ACK;
+      if (sock->they_closed && !sock->i_closed)
+	{
+	  tcph_ack->flags |= TCP_FIN;
+	  sock->i_closed;
+	}
       tcph_ack->window = !sock->i_stall ? grub_cpu_to_be16 (sock->my_window)
 	: 0;
     }
@@ -1255,6 +1259,12 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
 	  sock->established = 1;
 	  ack (sock);
+	}
+      else if (tcph->flags & TCP_ACK && sock->i_closed && sock->they_closed)
+	{
+	  destroy_socket (sock);
+	  grub_netbuff_free (nb);
+	  return GRUB_ERR_NONE;
 	}
 
       if (tcph->flags & TCP_PSH)
