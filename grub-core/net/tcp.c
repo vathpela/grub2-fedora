@@ -1142,9 +1142,9 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 
       /* If we called close and there's more data (not just empty ACKs and
        * whatnot), send a reset. */
-      if (sock->i_reseted && len > 0)
+      if (sock->i_closed && len > 0)
 	{
-	  dbg ("i_reseted and there's %u bytes of data\n",
+	  dbg ("i_closed and there's %u bytes of data\n",
 	       their_seq (sock, seqnr));
 	  reset (sock);
 	}
