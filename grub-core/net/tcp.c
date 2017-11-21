@@ -1481,6 +1481,13 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  if (!(grub_be_to_cpu16 (tcph->dst) == listen->port
 		&& (inf == listen->inf || listen->inf == NULL)))
 	    continue;
+
+	  if (tcph->flags & TCP_RST && !sock->their_cur_seq)
+	    {
+	      grub_netbuff_free (nb);
+	      return GRUB_ERR_NONE;
+	    }
+
 	  sock = grub_zalloc (sizeof (*sock));
 	  if (sock == NULL)
 	    return grub_errno;
