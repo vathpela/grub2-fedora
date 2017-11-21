@@ -1185,10 +1185,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 
       /* If there is data, puts packet in socket list. */
       if (len > 0)
-	{
-	  grub_net_put_packet (&sock->packs, nb_top);
-	  do_ack = 1;
-	}
+	grub_net_put_packet (&sock->packs, nb_top);
       else
 	grub_netbuff_free (nb_top);
     }
@@ -1236,6 +1233,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 			  const grub_net_network_level_address_t *source)
 {
   struct tcphdr *tcph;
+  struct grub_net_tcp_socket sockbuf;
   grub_net_tcp_socket_t sock, next_sock;
   grub_err_t err;
   grub_ssize_t len, hdrlen;
@@ -1356,6 +1354,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 
       if (tcph->flags & TCP_RST)
 	{
+	  dbg ("They reset\n");
 	  sock->they_reseted = 1;
 	  error (sock);
 	  grub_netbuff_free (nb);
@@ -1502,6 +1501,25 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  return err;
 	}
     }
+
+  /* If this isn't an open socket, we send RST or RST|ACK depending on their
+   * ack field, unless it's a RST packet, in which case we ignore it. */
+  if (!(tcph->flags & TCP_RST))
+    {
+      memset (&sockbuf, 0, sizeof (sockbuf));
+      sock = &sockbuf;
+      sock->i_closed = 1;
+      sock->they_closed = 1;
+      sock->errors = 1;
+      sock->i_reseted = 1;
+      sock->in_port = grub_be_to_cpu16 (tcph->src);
+      sock->out_port = grub_be_to_cpu16 (tcph->dst);
+      reset_window (sock);
+      sock->their_cur_seq = grub_be_to_cpu32 (tcph->seqnr) + len;
+      sock->my_cur_seq = grub_be_to_cpu32 (tcph->ack);
+      reset (sock);
+    }
+
   grub_netbuff_free (nb);
   return GRUB_ERR_NONE;
 }
