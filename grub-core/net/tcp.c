@@ -596,8 +596,16 @@ ack (grub_net_tcp_socket_t sock)
 }
 
 static void
-reset (grub_net_tcp_socket_t sock, int ack)
+reset (grub_net_tcp_socket_t sock)
 {
+  int ack = 0;
+
+  /* If it's closed, we ACK if they've sent an ACK */
+  if (sock->i_closed || sock->they_closed)
+    {
+      if (!sock->their_cur_seq)
+	ack = 1;
+    }
   ack_real (sock, 1, ack);
 }
 
@@ -1122,7 +1130,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 	       their_seq(sock, seqnr), their_seq(sock, sock->their_cur_seq));
 	  if (their_seq (sock, seqnr) >> 4 >
 	      their_seq (sock, sock->their_cur_seq))
-	      reset (sock, 1);
+	      reset (sock);
 	  else
 	    {
 	      do_ack = 1;
@@ -1137,7 +1145,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 	{
 	  dbg ("i_reseted and there's %u bytes of data\n",
 	       their_seq (sock, seqnr));
-	  reset (sock, 0);
+	  reset (sock);
 	}
 
       /* If we got here, we're actually consuming the packet, so it's safe to
@@ -1152,7 +1160,7 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 	{
 	  dbg ("grub_netbuff_pull() failed: %d\n", err);
 	  sock->i_reseted = 1;
-	  reset (sock, 0);
+	  reset (sock);
 	  break;
 	}
 
@@ -1389,9 +1397,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	}
 
       if (sock->i_reseted && len > 0)
-	{
-	  reset (sock, 0);
-	}
+	reset (sock);
 
       if ((tcph->flags & TCP_ACK && len > 0)
 	  || !(tcph->flags & TCP_ACK)
