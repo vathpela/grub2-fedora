@@ -587,6 +587,12 @@ grub_env_set_net_property (const char *intername, const char *suffix,
 void
 grub_net_poll_cards (unsigned time, int *stop_condition);
 
+/* Poll the cards, and stop when stop(data) != 0.  stop(data) may be called
+ * more than once even once it has returned true, so do not use a condition
+ * with side effects here. */
+void
+grub_net_poll_cards_cb (unsigned time, int (*stop)(void *data), void *data);
+
 void grub_bootp_init (void);
 void grub_bootp_fini (void);
 

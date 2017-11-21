@@ -1588,9 +1588,11 @@ grub_net_fs_close (grub_file_t file)
 }
 
 static void
-receive_packets (struct grub_net_card *card, int *stop_condition)
+receive_packets_cb (struct grub_net_card *card,
+		    int (*stop)(void *data), void *data)
 {
   int received = 0;
+
   if (card->num_ifaces == 0)
     return;
   if (!card->opened)
@@ -1605,13 +1607,13 @@ receive_packets (struct grub_net_card *card, int *stop_condition)
 	}
       card->opened = 1;
     }
-  while (received < 100)
+  while (1)
     {
       /* Maybe should be better have a fixed number of packets for each card
 	 and just mark them as used and not used.  */ 
       struct grub_net_buff *nb;
 
-      if (received > 10 && stop_condition && *stop_condition)
+      if (stop && stop(data))
 	break;
 
       nb = card->driver->recv (card);
@@ -1630,6 +1632,20 @@ receive_packets (struct grub_net_card *card, int *stop_condition)
 	}
     }
   grub_print_error ();
+}
+
+static int
+int_pointer_stop_cb (void *data)
+{
+  int *stop_condition = data;
+
+  return (!stop_condition || *stop_condition);
+}
+
+static void
+receive_packets (struct grub_net_card *card, int *stop_condition)
+{
+  receive_packets_cb (card, int_pointer_stop_cb, stop_condition);
 }
 
 static char *
@@ -1681,6 +1697,26 @@ grub_net_poll_cards (unsigned time, int *stop_condition)
     FOR_NET_CARDS (card)
       receive_packets (card, stop_condition);
   if (!stop_condition || !*stop_condition)
+    grub_net_tcp_retransmit ();
+}
+
+void
+grub_net_poll_cards_cb (unsigned time, int (*stop)(void *data), void *data)
+{
+  struct grub_net_card *card;
+  grub_uint64_t start_time;
+  start_time = grub_get_time_ms ();
+  int stop_condition;
+
+  stop_condition = stop(data);
+  do
+    {
+      FOR_NET_CARDS (card)
+	receive_packets_cb (card, stop, data);
+    }
+  while ((grub_get_time_ms () - start_time) < time
+	 && !(stop && (stop_condition = stop(data))));
+  if (!stop_condition)
     grub_net_tcp_retransmit ();
 }
 
