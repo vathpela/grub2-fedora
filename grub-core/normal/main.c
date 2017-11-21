@@ -387,6 +387,23 @@ static grub_err_t
 grub_cmd_normal (struct grub_command *cmd __attribute__ ((unused)),
 		 int argc, char *argv[])
 {
+  struct grub_term_output *term;
+
+  if (grub_env_get ("debug") != NULL)
+    {
+      FOR_ACTIVE_TERM_OUTPUTS(term)
+	{
+	  unsigned int i, j = grub_term_height (term);
+	  struct grub_term_coordinate pos = {0, 0};
+
+	  grub_term_gotoxy (term, pos);
+	  for (i = 0; i < j; i++)
+	    grub_putcode ('\n', term);
+	}
+
+      return 0;
+    }
+
   if (argc)
     grub_enter_normal_mode (argv[0]);
   else

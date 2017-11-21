@@ -26,6 +26,8 @@
 #include <grub/mm.h>
 #include <grub/priority_queue.h>
 #include <grub/time.h>
+#include <grub/backtrace.h>
+#include <grub/lib/hexdump.h>
 
 struct iphdr {
   grub_uint8_t verhdrlen;
@@ -120,7 +122,7 @@ grub_net_ip_chksum (void *ipv, grub_size_t len)
 static int id = 0x2400;
 
 static grub_err_t
-send_fragmented (struct grub_net_network_level_interface * inf,
+send_fragmented (const struct grub_net_network_level_interface * inf,
 		 const grub_net_network_level_address_t * target,
 		 struct grub_net_buff * nb,
 		 grub_net_ip_protocol_t proto,
@@ -184,18 +186,24 @@ send_fragmented (struct grub_net_network_level_interface * inf,
 }
 
 static grub_err_t
-grub_net_send_ip4_packet (struct grub_net_network_level_interface *inf,
+grub_net_send_ip4_packet (const struct grub_net_network_level_interface *inf,
 			  const grub_net_network_level_address_t *target,
 			  const grub_net_link_level_address_t *ll_target_addr,
 			  struct grub_net_buff *nb,
 			  grub_net_ip_protocol_t proto)
 {
   struct iphdr *iph;
+  grub_err_t err;
 
   COMPILE_TIME_ASSERT (GRUB_NET_OUR_IPV4_HEADER_SIZE == sizeof (*iph));
 
   if (nb->tail - nb->data + sizeof (struct iphdr) > inf->card->mtu)
-    return send_fragmented (inf, target, nb, proto, *ll_target_addr);
+    {
+      err = send_fragmented (inf, target, nb, proto, *ll_target_addr);
+      if (err)
+	grub_printf("send_fragmented: %m: %1m\n");
+      return err;
+    }
 
   grub_netbuff_push (nb, sizeof (*iph));
   iph = (struct iphdr *) nb->data;
@@ -213,8 +221,11 @@ grub_net_send_ip4_packet (struct grub_net_network_level_interface *inf,
   iph->chksum = 0;
   iph->chksum = grub_net_ip_chksum ((void *) nb->data, sizeof (*iph));
 
-  return send_ethernet_packet (inf, nb, *ll_target_addr,
-			       GRUB_NET_ETHERTYPE_IP);
+  err = send_ethernet_packet (inf, nb, *ll_target_addr,
+			      GRUB_NET_ETHERTYPE_IP);
+  if (err)
+    grub_printf("%s:%d: send_ethernet_packet: %m: %1m\n", GRUB_FILE, __LINE__);
+  return err;
 }
 
 static grub_err_t
@@ -369,7 +380,7 @@ handle_dgram (struct grub_net_buff *nb,
     case GRUB_NET_IP_UDP:
       return grub_net_recv_udp_packet (nb, inf, source);
     case GRUB_NET_IP_TCP:
-      return grub_net_recv_tcp_packet (nb, inf, source);
+      return grub_net_recv_tcp_packet (nb, inf, source, ttl);
     case GRUB_NET_IP_ICMP:
       return grub_net_recv_icmp_packet (nb, inf, source_hwaddress, source);
     case GRUB_NET_IP_ICMPV6:
@@ -457,7 +468,7 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
 	err = grub_netbuff_unput (nb, actual_size - expected_size);
 	if (err)
 	  {
-	    grub_dprintf ("net", "grub_netbuff_unput() = %d\n", err);
+	    grub_dprintf ("net", "grub_netbuff_unput(): %m: %1m\n");
 	    grub_netbuff_free (nb);
 	    return err;
 	  }
@@ -483,7 +494,7 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
 				    * sizeof (grub_uint32_t)));
       if (err)
 	{
-	  grub_dprintf ("net", "grub_netbuff_pull() = %d\n", err);
+	  grub_dprintf ("net", "grub_netbuff_pull(): %m: %1m\n");
 	  grub_netbuff_free (nb);
 	  return err;
 	}
@@ -640,7 +651,7 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
 }
 
 static grub_err_t
-grub_net_send_ip6_packet (struct grub_net_network_level_interface *inf,
+grub_net_send_ip6_packet (const struct grub_net_network_level_interface *inf,
 			  const grub_net_network_level_address_t *target,
 			  const grub_net_link_level_address_t *ll_target_addr,
 			  struct grub_net_buff *nb,
@@ -668,21 +679,31 @@ grub_net_send_ip6_packet (struct grub_net_network_level_interface *inf,
 }
 
 grub_err_t
-grub_net_send_ip_packet (struct grub_net_network_level_interface *inf,
+grub_net_send_ip_packet (const struct grub_net_network_level_interface *inf,
 			 const grub_net_network_level_address_t *target,
 			 const grub_net_link_level_address_t *ll_target_addr,
 			 struct grub_net_buff *nb,
 			 grub_net_ip_protocol_t proto)
 {
+  grub_err_t err;
   switch (target->type)
     {
     case GRUB_NET_NETWORK_LEVEL_PROTOCOL_IPV4:
-      return grub_net_send_ip4_packet (inf, target, ll_target_addr, nb, proto);
+      err = grub_net_send_ip4_packet (inf, target, ll_target_addr, nb, proto);
+      if (err)
+	grub_printf("%s:%d: grub_net_send_ip4_packet(): %m: %1m\n", GRUB_FILE, __LINE__);
+      break;
     case GRUB_NET_NETWORK_LEVEL_PROTOCOL_IPV6:
-      return grub_net_send_ip6_packet (inf, target, ll_target_addr, nb, proto);
+      err = grub_net_send_ip6_packet (inf, target, ll_target_addr, nb, proto);
+      if (err)
+	grub_printf("%s:%d: grub_net_send_ip_packet(): %m: %1m\n", GRUB_FILE, __LINE__);
+      break;
     default:
-      return grub_error (GRUB_ERR_BUG, "not an IP");
+      err = grub_error (GRUB_ERR_BUG, "not an IP");
+      grub_printf("%s:%d: grub_net_send_ip_packet(): %m: %1m: target type 0x%x\n", GRUB_FILE, __LINE__, target->type);
+      grub_backtrace(0);
     }
+  return err;
 }
 
 static grub_err_t
@@ -750,12 +771,26 @@ grub_net_recv_ip_packets (struct grub_net_buff *nb,
 			  const grub_net_link_level_address_t *src_hwaddress)
 {
   struct iphdr *iph = (struct iphdr *) nb->data;
+  grub_err_t err = GRUB_ERR_NONE;
 
   if ((iph->verhdrlen >> 4) == 4)
-    return grub_net_recv_ip4_packets (nb, card, hwaddress, src_hwaddress);
-  if ((iph->verhdrlen >> 4) == 6)
-    return grub_net_recv_ip6_packets (nb, card, hwaddress, src_hwaddress);
-  grub_dprintf ("net", "Bad IP version: %d\n", (iph->verhdrlen >> 4));
-  grub_netbuff_free (nb);
-  return GRUB_ERR_NONE;
+    {
+      err = grub_net_recv_ip4_packets (nb, card, hwaddress, src_hwaddress);
+      if (err)
+	grub_dprintf ("net", "grub_net_recv_ip4_packets() = %d (%m): %s\n",
+		      err, grub_errmsg);
+    }
+  else if ((iph->verhdrlen >> 4) == 6)
+    {
+      err = grub_net_recv_ip6_packets (nb, card, hwaddress, src_hwaddress);
+      if (err)
+	grub_dprintf ("net", "grub_net_recv_ip6_packets() = %d (%m): %s\n",
+		      err, grub_errmsg);
+    }
+  else
+    {
+      grub_dprintf ("net", "Bad IP version: %d\n", (iph->verhdrlen >> 4));
+      grub_netbuff_free (nb);
+    }
+  return err;
 }

@@ -190,7 +190,11 @@ grub_net_arp_receive (struct grub_net_buff *nb,
 
 	err = grub_netbuff_push (&nb_reply, arp_packet_len);
 	if (err)
-	  return err;
+	  {
+	    grub_dprintf ("net", "grub_netbuff_push() = %d (%m): %s\n",
+			  err, grub_errmsg);
+	    return err;
+	  }
 
 	arp_reply = (struct arphdr *) nb_reply.data;
 
@@ -223,7 +227,10 @@ grub_net_arp_receive (struct grub_net_buff *nb,
 	grub_memcpy (target.mac, sender_mac_addr.mac, hln);
 
 	/* Change operation to REPLY and send packet */
-	send_ethernet_packet (inf, &nb_reply, target, GRUB_NET_ETHERTYPE_ARP);
+	err = send_ethernet_packet (inf, &nb_reply, target, GRUB_NET_ETHERTYPE_ARP);
+	if (err)
+	  grub_dprintf ("net", "send_ethernet_packet(): %d (%m): %s\n",
+			err, grub_errmsg);
       }
   }
   return GRUB_ERR_NONE;
