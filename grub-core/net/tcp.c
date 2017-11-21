@@ -1069,6 +1069,17 @@ grub_net_tcp_flush_recv_queue (grub_net_tcp_socket_t sock)
     }
 }
 
+static int
+recv_pending (struct grub_net_network_level_interface *inf)
+{
+  int rc;
+
+  rc = inf->card->driver->recv_pending (inf->card);
+  if (rc < 1)
+    return 0;
+  return rc;
+}
+
 static grub_err_t
 grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 {
@@ -1174,8 +1185,11 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 	grub_netbuff_free (nb_top);
     }
 
-  if (sock->they_push && sock->i_stall == 1 && !grub_priority_queue_top (sock->pq))
+  if (sock->they_push)
+      && !grub_priority_queue_top (sock->pq))
     {
+      if (recv_pending (sock->inf))
+	return GRUB_ERR_NONE;
       sock->i_stall = 0;
       sock->they_push = 0;
     }
@@ -1206,17 +1220,6 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
     sock->fin_hook (sock, sock->hook_data);
 
   return err;
-}
-
-static int
-recv_pending (struct grub_net_network_level_interface *inf)
-{
-  int rc;
-
-  rc = inf->card->driver->recv_pending (inf->card);
-  if (rc < 1)
-    return 0;
-  return rc;
 }
 
 grub_err_t
