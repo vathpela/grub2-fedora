@@ -1292,13 +1292,26 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	   their_seq (sock, grub_be_to_cpu32 (tcph->seqnr)),
 	   my_seq (sock, grub_be_to_cpu32 (tcph->ack)), len);
 
-      if (tcph->flags & TCP_SYN && tcph->flags & TCP_ACK && !sock->established)
+      if (tcph->flags & TCP_SYN && tcph->flags & TCP_ACK)
 	{
-	  dbg ("their starting sequence is %u\n", sock->their_start_seq);
-	  sock->their_cur_seq = sock->their_start_seq + 1;
-	  dbg ("%u -> their_cur_seq\n", their_seq (sock, sock->their_cur_seq));
-	  sock->established = 1;
-	  ack (sock);
+	  if (sock->established)
+	    {
+	      dbg ("spurrious SYN|ACK %u\n",
+		   their_seq (sock, sock->their_cur_seq));
+	      reset (sock);
+	      sock->i_reseted = 1;
+	      grub_netbuff_free (nb);
+	      return GRUB_ERR_NONE;
+	    }
+	  else
+	    {
+	      dbg ("their starting sequence is %u\n", sock->their_start_seq);
+	      sock->their_cur_seq = sock->their_start_seq + 1;
+	      dbg ("%u -> their_cur_seq\n",
+		   their_seq (sock, sock->their_cur_seq));
+	      sock->established = 1;
+	      ack (sock);
+	    }
 	}
       else if (tcph->flags & TCP_ACK && sock->i_closed && sock->they_closed)
 	{
