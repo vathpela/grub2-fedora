@@ -1179,7 +1179,6 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock, int force_ack)
 	  // XXX FIXME ack (sock);
 	  // XXX FIXME do_ack = 1;
 	  ack (sock);
-	  do_ack = 0;
 	}
 
       /* If this is near the end of the window, we need to ACK fast. */
