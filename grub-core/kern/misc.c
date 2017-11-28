@@ -1030,6 +1030,7 @@ grub_vsnprintf_real (char *str, grub_size_t max_len, const char *fmt0,
       char zerofill = ' ';
       char rightfill = 0;
       grub_size_t curn;
+      const char *p = NULL;
 
       if (c != '%')
 	{
@@ -1103,10 +1104,10 @@ grub_vsnprintf_real (char *str, grub_size_t max_len, const char *fmt0,
 	case 'd':
 	  {
 	    char tmp[32];
-	    const char *p = tmp;
 	    grub_size_t len;
 	    grub_size_t fill;
 
+	    p = tmp;
 	    len = grub_lltoa (tmp, c, curarg) - tmp;
 	    fill = len < format1 ? format1 - len : 0;
 	    if (! rightfill)
@@ -1164,12 +1165,17 @@ grub_vsnprintf_real (char *str, grub_size_t max_len, const char *fmt0,
 	  }
 	  break;
 
+	case 'm':
+	  p = grub_strerror(grub_errno);
+	  /* fallthrough */
 	case 's':
 	  {
 	    grub_size_t len = 0;
 	    grub_size_t fill;
-	    const char *p = ((char *) (grub_addr_t) curarg) ? : "(null)";
 	    grub_size_t i;
+
+	    if (p == NULL)
+	      p = ((char *) (grub_addr_t) curarg) ? : "(null)";
 
 	    while (len < format2 && p[len])
 	      len++;
