@@ -1692,12 +1692,14 @@ grub_net_poll_cards (unsigned time, int *stop_condition)
   struct grub_net_card *card;
   grub_uint64_t start_time;
   start_time = grub_get_time_ms ();
-  while ((grub_get_time_ms () - start_time) < time
-	 && (!stop_condition || !*stop_condition))
-    FOR_NET_CARDS (card)
-      receive_packets (card, stop_condition);
-  if (!stop_condition || !*stop_condition)
-    grub_net_tcp_retransmit ();
+  do
+    {
+      FOR_NET_CARDS (card)
+	receive_packets (card, stop_condition);
+      if (stop_condition && *stop_condition)
+	return;
+    } while ((grub_get_time_ms () - start_time) < time);
+  grub_net_tcp_retransmit ();
 }
 
 void
@@ -1706,18 +1708,20 @@ grub_net_poll_cards_cb (unsigned time, int (*stop)(void *data), void *data)
   struct grub_net_card *card;
   grub_uint64_t start_time;
   start_time = grub_get_time_ms ();
-  int stop_condition;
+  int stop_condition = 1;
 
-  stop_condition = stop(data);
   do
     {
       FOR_NET_CARDS (card)
 	receive_packets_cb (card, stop, data);
-    }
-  while ((grub_get_time_ms () - start_time) < time
-	 && !(stop && (stop_condition = stop(data))));
-  if (!stop_condition)
-    grub_net_tcp_retransmit ();
+      if (stop)
+	{
+	  stop_condition = stop (data);
+	  if (stop_condition)
+	    return;
+	}
+    } while ((grub_get_time_ms () - start_time) < time);
+  grub_net_tcp_retransmit ();
 }
 
 static void
