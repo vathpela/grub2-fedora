@@ -369,7 +369,7 @@ handle_dgram (struct grub_net_buff *nb,
     case GRUB_NET_IP_UDP:
       return grub_net_recv_udp_packet (nb, inf, source);
     case GRUB_NET_IP_TCP:
-      return grub_net_recv_tcp_packet (nb, inf, source);
+      return grub_net_recv_tcp_packet (nb, inf, source, ttl);
     case GRUB_NET_IP_ICMP:
       return grub_net_recv_icmp_packet (nb, inf, source_hwaddress, source);
     case GRUB_NET_IP_ICMPV6:

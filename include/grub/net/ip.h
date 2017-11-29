@@ -77,7 +77,8 @@ grub_net_recv_udp_packet (struct grub_net_buff *nb,
 grub_err_t
 grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 			  struct grub_net_network_level_interface *inf,
-			  const grub_net_network_level_address_t *source);
+			  const grub_net_network_level_address_t *source,
+			  grub_uint8_t ttl);
 
 grub_uint16_t
 grub_net_ip_transport_checksum (struct grub_net_buff *nb,
