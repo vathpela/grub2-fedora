@@ -726,7 +726,7 @@ tcp_send (struct grub_net_buff *nb, grub_net_tcp_socket_t socket)
   dbg ("%d %s sending %s (seq:%u ack:%u)\n", socket->local_port,
        tcp_state_names[socket->state], flags_str (tcph->flags),
        my_seq (socket, grub_be_to_cpu32 (tcph->seqnr)),
-       their_seq (socket, grub_be_to_cpu32 (tcph->ack)));
+       tcph->ack == 0 ? 0 : their_seq (socket, grub_be_to_cpu32 (tcph->ack)));
 
   err = grub_net_send_ip_packet (socket->inf, &(socket->out_nla),
 				 &(socket->ll_target_addr), nb,
