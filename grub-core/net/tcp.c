@@ -300,7 +300,8 @@ static struct grub_net_tcp_listen *tcp_listens;
 
 #define FOR_TCP_OPTIONS(tcph, opt)					    \
   for ((opt) = (struct tcp_opt *)(((char *)tcph) + sizeof (struct tcphdr)); \
-       tcplen((tcph)->flags) > 20 && ((opt)->kind) != 0 ;		    \
+       tcplen((tcph)->flags) > 20					    \
+       && (char *)opt < (((char *)tcph) + tcplen((tcph)->flags)) ;	    \
        (opt) = (struct tcp_opt *)((char *)(opt) +			    \
 				  ((opt)->kind == 1 ? 1 : ((opt)->length))))
 
@@ -1469,6 +1470,9 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
       len = pktlen (nb_top) - hdrlen;
       flags = tcpflags(tcph);
 
+      dbg ("%d processing nb with seqnr %lu\n",
+	   sock->local_port, their_seq (sock, seqnr));
+
       seg.seq = grub_be_to_cpu32 (tcph->seqnr);
       seg.ack = grub_be_to_cpu32 (tcph->ack);
       seg.len = len;
@@ -1492,13 +1496,11 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	  scale = (struct tcp_scale_opt *)opt;
 	  sock->rcv.wnd = grub_be_to_cpu16 (tcph->window);
 	  sock->rcv.sca = scale->scale;
-	  break;
 	}
 
       seg.wnd = sock->rcv.wnd << sock->rcv.sca;
-
-      dbg ("%d processing nb with seqnr %lu\n",
-	   sock->local_port, their_seq (sock, seqnr));
+      dbgw ("%d wnd = %u << %u == %lu\n", sock->local_port,
+	    sock->rcv.wnd, sock->rcv.sca, seg.wnd);
 
 #if 0
       /* If we've got an out-of-order packet, we need to re-ack to make sure
