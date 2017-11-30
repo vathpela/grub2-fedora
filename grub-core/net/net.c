@@ -1592,12 +1592,12 @@ receive_packets_cb (struct grub_net_card *card,
 		    int (*stop)(void *data), void *data)
 {
   int received = 0;
+  grub_err_t err = GRUB_ERR_NONE;
 
   if (card->num_ifaces == 0)
     return;
   if (!card->opened)
     {
-      grub_err_t err = GRUB_ERR_NONE;
       if (card->driver->open)
 	err = card->driver->open (card);
       if (err)
@@ -1623,15 +1623,17 @@ receive_packets_cb (struct grub_net_card *card,
 	  break;
 	}
       received++;
-      grub_net_recv_ethernet_packet (nb, card);
-      if (grub_errno)
+      err = grub_net_recv_ethernet_packet (nb, card);
+      if (err)
 	{
-	  grub_dprintf ("net", "error receiving: %d: %s\n", grub_errno,
-			grub_errmsg);
+	  grub_dprintf ("net", "error receiving: %d (%m) %s\n", err, grub_errmsg);
 	  grub_errno = GRUB_ERR_NONE;
 	}
     }
-  grub_print_error ();
+  if (grub_error_peek())
+    {
+      grub_printf ("%s:%d: ", GRUB_FILE, __LINE__); grub_print_error ();
+    }
 }
 
 static int
@@ -1695,11 +1697,15 @@ grub_net_poll_cards (unsigned time, int *stop_condition)
   do
     {
       FOR_NET_CARDS (card)
-	receive_packets (card, stop_condition);
-      if (stop_condition && *stop_condition)
-	return;
+	{
+	  receive_packets (card, stop_condition);
+	  if (stop_condition && *stop_condition)
+	    return;
+	}
     } while ((grub_get_time_ms () - start_time) < time);
-  grub_net_tcp_retransmit ();
+  grub_dprintf ("net", "processing retransmits\n");
+  if (!stop_condition || !*stop_condition)
+    grub_net_tcp_retransmit ();
 }
 
 void
@@ -1713,14 +1719,17 @@ grub_net_poll_cards_cb (unsigned time, int (*stop)(void *data), void *data)
   do
     {
       FOR_NET_CARDS (card)
-	receive_packets_cb (card, stop, data);
-      if (stop)
 	{
-	  stop_condition = stop (data);
-	  if (stop_condition)
-	    return;
+	  receive_packets_cb (card, stop, data);
+	  if (stop)
+	    {
+	      stop_condition = stop (data);
+	      if (stop_condition)
+		return;
+	    }
 	}
     } while ((grub_get_time_ms () - start_time) < time);
+  grub_dprintf ("net", "processing retransmits\n");
   grub_net_tcp_retransmit ();
 }
 
@@ -1901,7 +1910,7 @@ grub_net_search_configfile (char *config)
   grub_size_t config_len;
   char *suffix;
 
-  grub_env_set ("debug", "net,tcp,http");
+  grub_env_set ("debug", "net,http");
   //grub_env_set ("debug", "http");
 
   auto int search_through (grub_size_t num_tries, grub_size_t slice_size);

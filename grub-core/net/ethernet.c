@@ -134,8 +134,8 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
   err = grub_netbuff_pull (nb, etherhdr_size);
   if (err)
     {
-      grub_dprintf ("net", "nb len %lu grub_netbuff_pull (nb, %d) = %d\n",
-		    nb->data - nb->tail, etherhdr_size, err);
+      grub_dprintf ("net", "grub_netbuff_pull (...%d) = %d (%m) %s\n",
+		    etherhdr_size, err, grub_errmsg);
       return err;
     }
 
@@ -150,8 +150,8 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
 	  if (err)
 	    {
 	      grub_dprintf ("net",
-			    "nb len %lu grub_netbuff_pull (nb, %lu) = %d\n",
-			    nb->data - nb->tail, sizeof (*llch), err);
+			    "grub_netbuff_pull (...%lu) = %d (%m): %s\n",
+			    sizeof (*llch), err, grub_errmsg);
 	      return err;
 	    }
 	  snaph = (struct snaphdr *) nb->data;
@@ -159,23 +159,26 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
 	}
     }
 
+  err = GRUB_ERR_NONE;
   switch (type)
     {
       /* ARP packet. */
     case GRUB_NET_ETHERTYPE_ARP:
-      grub_net_arp_receive (nb, card);
+      err = grub_net_arp_receive (nb, card);
+      if (err)
+	grub_dprintf ("net", "grub_net_arp_receive() = %d (%m): %s\n",
+		      err, grub_errmsg);
       grub_netbuff_free (nb);
-      return GRUB_ERR_NONE;
+      return err;
       /* IP packet.  */
     case GRUB_NET_ETHERTYPE_IP:
     case GRUB_NET_ETHERTYPE_IP6:
       err = grub_net_recv_ip_packets (nb, card, &hwaddress, &src_hwaddress);
       if (err)
-	grub_dprintf ("net",
-		      "nb len %ld grub_net_recv_ip_packets(nb,...) = %d\n",
-		      nb->data - nb->tail, err);
+	grub_dprintf ("net", "grub_net_recv_ip_packets() = %d (%m): %s\n",
+		      err, grub_errmsg);
       return err;
     }
   grub_netbuff_free (nb);
-  return GRUB_ERR_NONE;
+  return err;
 }

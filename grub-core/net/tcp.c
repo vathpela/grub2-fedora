@@ -125,12 +125,12 @@ struct tcp_state_transition
   {
     { CLOSED, SYN_SENT },
     { CLOSED, LISTEN },
-    { SYN_SENT, CLOSED },
     { SYN_SENT, SYN_RCVD },
     { SYN_SENT, ESTABLISHED },
-    { SYN_RCVD, CLOSED },
+    { SYN_SENT, CLOSED },
     { SYN_RCVD, ESTABLISHED },
     { SYN_RCVD, FIN_WAIT_1 },
+    { SYN_RCVD, CLOSED },
     { ESTABLISHED, FIN_WAIT_1 },
     { ESTABLISHED, CLOSE_WAIT },
     { ESTABLISHED, CLOSED },
@@ -138,10 +138,10 @@ struct tcp_state_transition
     { FIN_WAIT_1, CLOSING },
     { FIN_WAIT_1, TIME_WAIT },
     { FIN_WAIT_1, CLOSED },
-    { CLOSE_WAIT, LAST_ACK },
-    { CLOSE_WAIT, CLOSED },
     { FIN_WAIT_2, TIME_WAIT },
     { FIN_WAIT_2, CLOSED },
+    { CLOSE_WAIT, LAST_ACK },
+    { CLOSE_WAIT, CLOSED },
     { CLOSING, TIME_WAIT },
     { CLOSING, CLOSED },
     { LAST_ACK, CLOSED },
@@ -151,12 +151,16 @@ struct tcp_state_transition
 
 struct tcp_segment
 {
+  struct grub_net_tcp_socket *sock;
   grub_uint32_t seq; /* SEG.SEQ - segment sequence number */
   grub_uint32_t ack; /* SEG.ACK - segment acknowledgment number */
   grub_uint32_t len; /* SEG.LEN - segment length */
   grub_uint64_t wnd; /* SEG.WND - segment window */
   int up;  /* SEG.UP  - segment urgent pointer */
   int prc; /* SEG.PRC - segment precedence value */
+  struct tcphdr *tcph;
+  grub_uint32_t txtlen;
+  struct grub_net_buff *nb;
 };
 
 struct grub_net_tcp_listen
@@ -206,7 +210,7 @@ struct grub_net_tcp_socket
 
   grub_uint8_t ttl;
   grub_uint32_t time_wait;
-  int force_ack;
+  int needs_ack;
 
   int i_closed;
   int they_closed;
@@ -216,7 +220,6 @@ struct grub_net_tcp_socket
   int i_stall;
   int they_push;
   grub_uint64_t last_ack_ms;
-  grub_uint32_t queue_bytes;
   struct unacked *unack_first;
   struct unacked *unack_last;
   grub_err_t (*recv_hook) (grub_net_tcp_socket_t sock, struct grub_net_buff *nb,
@@ -315,13 +318,26 @@ static grub_err_t
 grub_net_tcp_process_queue (grub_net_tcp_socket_t sock);
 static void
 ack (grub_net_tcp_socket_t sock);
+static void
+prune_acks (grub_net_tcp_socket_t sock, grub_uint32_t acked);
 
 static int
-is_not_fin_wait_1 (void *data)
+recv_pending (struct grub_net_network_level_interface *inf)
+{
+  int rc;
+
+  rc = inf->card->driver->recv_pending (inf->card);
+  if (rc < 1)
+    return 0;
+  return rc;
+}
+
+static int
+is_closed (void *data)
 {
   grub_net_tcp_socket_t sock = (grub_net_tcp_socket_t)data;
 
-  return sock->state != FIN_WAIT_1;
+  return sock->state == CLOSED;
 }
 
 static int
@@ -526,56 +542,6 @@ cmp (const void *a__, const void *b__)
   return 0;
 }
 
-static void
-destroy_socket (grub_net_tcp_socket_t socket)
-{
-  struct unacked *unack, *next;
-
-  for (unack = socket->unack_first; unack; unack = next)
-    {
-      next = unack->next;
-      grub_netbuff_free (unack->nb);
-      grub_free (unack);
-    }
-
-  socket->unack_first = NULL;
-  socket->unack_last = NULL;
-
-  grub_list_remove (GRUB_AS_LIST (socket));
-  destroy_pq (socket);
-  grub_free (socket);
-}
-
-static grub_net_tcp_socket_t
-new_socket (struct grub_net_network_level_interface *inf,
-	    struct tcphdr *tcph,
-	    const grub_net_network_level_address_t *source)
-{
-  grub_net_tcp_socket_t sock;
-
-  sock = grub_zalloc (sizeof (*sock));
-  if (sock == NULL)
-    return NULL;
-
-  sock->state = CLOSED;
-  if (tcph)
-    {
-      sock->local_port = grub_be_to_cpu16 (tcph->src);
-      sock->remote_port = grub_be_to_cpu16 (tcph->dst);
-    }
-  sock->inf = inf;
-  sock->out_nla = *source;
-
-  sock->pq = grub_priority_queue_new (sizeof (struct grub_net_buff *), cmp);
-  if (!sock->pq)
-    {
-      grub_free (sock);
-      return NULL;
-    }
-
-  return sock;
-}
-
 static grub_err_t
 change_socket_state_real (grub_net_tcp_socket_t sock, tcp_state new_state,
 			  const char * const file, int line)
@@ -633,6 +599,91 @@ change_socket_state_real (grub_net_tcp_socket_t sock, tcp_state new_state,
 }
 
 #define change_socket_state(sock, new_state) change_socket_state_real (sock, new_state, GRUB_FILE, __LINE__)
+
+static void
+push_socket_data (grub_net_tcp_socket_t sock)
+{
+  while (sock->packs.first)
+    {
+      struct grub_net_buff *nb = sock->packs.first->nb;
+      if (sock->recv_hook)
+	sock->recv_hook (sock, sock->packs.first->nb, sock->hook_data);
+      else
+	grub_netbuff_free (nb);
+      grub_net_remove_packet (sock->packs.first);
+    }
+}
+
+static void
+destroy_socket (grub_net_tcp_socket_t socket)
+{
+  struct unacked *unack, *next;
+
+  for (unack = socket->unack_first; unack; unack = next)
+    {
+      next = unack->next;
+      grub_netbuff_free (unack->nb);
+      grub_free (unack);
+    }
+
+  socket->unack_first = NULL;
+  socket->unack_last = NULL;
+
+  grub_list_remove (GRUB_AS_LIST (socket));
+  destroy_pq (socket);
+  grub_free (socket);
+}
+
+static int
+check_time_wait (grub_net_tcp_socket_t sock, int destroy)
+{
+  if (sock->state == TIME_WAIT && grub_get_time_ms() > sock->time_wait)
+    {
+      dbg ("%d socket timer has expired, closing\n", sock->local_port);
+      change_socket_state (sock, CLOSED);
+
+      push_socket_data (sock);
+      if (sock->fin_hook)
+	sock->fin_hook (sock, sock->hook_data);
+
+      if (destroy)
+	{
+	  destroy_socket (sock);
+	  return 1;
+	}
+    }
+  return 0;
+}
+
+static grub_net_tcp_socket_t
+new_socket (struct grub_net_network_level_interface *inf,
+	    struct tcphdr *tcph,
+	    const grub_net_network_level_address_t *source)
+{
+  grub_net_tcp_socket_t sock;
+
+  sock = grub_zalloc (sizeof (*sock));
+  if (sock == NULL)
+    return NULL;
+
+  sock->state = CLOSED;
+  if (tcph)
+    {
+      sock->local_port = grub_be_to_cpu16 (tcph->src);
+      sock->remote_port = grub_be_to_cpu16 (tcph->dst);
+    }
+  sock->inf = inf;
+  sock->out_nla = *source;
+
+  sock->pq = grub_priority_queue_new (sizeof (struct grub_net_buff *), cmp);
+  if (!sock->pq)
+    {
+      grub_free (sock);
+      return NULL;
+    }
+
+  return sock;
+}
 
 grub_net_tcp_listen_t
 grub_net_tcp_listen (grub_uint16_t port,
@@ -743,10 +794,6 @@ void
 grub_net_tcp_close (grub_net_tcp_socket_t sock,
 		    int discard_received)
 {
-  struct grub_net_buff *nb_fin;
-  struct tcphdr *tcph_fin;
-  grub_err_t err;
-
   if (discard_received != GRUB_NET_TCP_CONTINUE_RECEIVING)
     {
       sock->recv_hook = NULL;
@@ -765,69 +812,29 @@ grub_net_tcp_close (grub_net_tcp_socket_t sock,
     {
     case ESTABLISHED:
       change_socket_state (sock, FIN_WAIT_1);
+      dbg ("%d acking %u\n", sock->local_port, their_seq (sock, sock->rcv.nxt));
       ack (sock);
-      grub_net_poll_cards_cb (GRUB_NET_INTERVAL,
-			      is_not_fin_wait_1, &sock->state);
-      return;
+      grub_net_poll_cards_cb (GRUB_NET_INTERVAL, is_closed, &sock->state);
       break;
     default:
-      return;
+      change_socket_state (sock, CLOSED);
+      break;
     }
-
-  nb_fin = grub_netbuff_alloc (sizeof (*tcph_fin)
-			       + GRUB_NET_OUR_MAX_IP_HEADER_SIZE
-			       + GRUB_NET_MAX_LINK_HEADER_SIZE);
-  if (!nb_fin)
-    return;
-  err = grub_netbuff_reserve (nb_fin, GRUB_NET_OUR_MAX_IP_HEADER_SIZE
-			       + GRUB_NET_MAX_LINK_HEADER_SIZE);
-  if (err)
-    {
-      grub_netbuff_free (nb_fin);
-      grub_dprintf ("net", "error closing socket: %m\n");
-      grub_errno = GRUB_ERR_NONE;
-      return;
-    }
-
-  err = grub_netbuff_put (nb_fin, sizeof (*tcph_fin));
-  if (err)
-    {
-      grub_netbuff_free (nb_fin);
-      grub_dprintf ("net", "error closing socket: %m\n");
-      grub_errno = GRUB_ERR_NONE;
-      return;
-    }
-  tcph_fin = (void *) nb_fin->data;
-  tcph_fin->ack = grub_cpu_to_be32 (sock->rcv.nxt);
-  tcph_fin->flags = tcpsize (sizeof *tcph_fin) | TCP_FIN | TCP_ACK;
-  tcph_fin->window = grub_cpu_to_be16_compile_time (0);
-  tcph_fin->window = grub_cpu_to_be16 (sock->snd.wnd);
-  tcph_fin->urgent = 0;
-  err = tcp_send (nb_fin, sock);
-  if (err)
-    {
-      grub_netbuff_free (nb_fin);
-      grub_dprintf ("net", "error closing socket: %m\n");
-      grub_errno = GRUB_ERR_NONE;
-    }
-  else
-    {
-      grub_net_poll_cards (GRUB_NET_INTERVAL, 0);
-    }
-  return;
 }
 
 static void
-ack_real (grub_net_tcp_socket_t sock, int res, int ack)
+ack_real (grub_net_tcp_socket_t sock, int res)
 {
   struct grub_net_buff *nb_ack;
   struct tcphdr *tcph_ack;
   grub_size_t hdrsize = sizeof (*tcph_ack);
   grub_err_t err;
+  int ack = res ? sock->needs_ack : 1;
 
   nb_ack = grub_netbuff_alloc (hdrsize + 128);
   if (!nb_ack)
     return;
+
   err = grub_netbuff_reserve (nb_ack, 128);
   if (err)
     {
@@ -846,6 +853,12 @@ error:
       grub_errno = GRUB_ERR_NONE;
       return;
     }
+
+#if 0
+  if (res && grub_priority_queue_top (sock->pq))
+    ack = 1;
+#endif
+
   tcph_ack = (void *) nb_ack->data;
   if (ack)
     {
@@ -887,13 +900,6 @@ error:
       tcph_ack->flags = tcpsize (hdrsize) | TCP_ACK;
       if (sock->state == FIN_WAIT_1)
 	tcph_ack->flags |= TCP_FIN;
-#if 0
-      if (sock->they_closed && !sock->i_closed)
-	{
-	  tcph_ack->flags |= TCP_FIN;
-	  sock->i_closed;
-	}
-#endif
     }
 
   tcph_ack->urgent = 0;
@@ -905,42 +911,21 @@ error:
       grub_dprintf ("net", "error acking socket: %m\n");
       grub_errno = GRUB_ERR_NONE;
     }
+
+  sock->needs_ack = 0;
 }
 
 static void
 ack (grub_net_tcp_socket_t sock)
 {
-#if 0
-  grub_uint64_t now = grub_get_time_ms ();
-
-  dbg ("%d snd.una:%u snd.nxt:%u\n", sock->local_port,
-       sock->snd.una, sock->snd.nxt);
-  if (sock->snd.una > sock->snd.nxt)
-    return;
-
-  if (now - sock->last_ack_ms < 500 &&
-      sock->state != FIN_WAIT_1 &&
-      sock->state != FIN_WAIT_2 &&
-      sock->state != TIME_WAIT &&
-      sock->state != CLOSING)
-    return;
-#endif
-
-  ack_real (sock, 0, 1);
+  ack_real (sock, 0);
 }
 
 static void
 reset (grub_net_tcp_socket_t sock)
 {
-  int ack = 0;
-
-  /* If it's closed, we ACK if they've sent an ACK */
-  if (sock->i_closed || sock->they_closed)
-    {
-      if (!sock->rcv.nxt)
-	ack = 1;
-    }
-  ack_real (sock, 1, ack);
+  ack_real (sock, 1);
+  grub_net_tcp_flush_recv_queue (sock);
 }
 
 void
@@ -953,6 +938,13 @@ grub_net_tcp_retransmit (void)
   FOR_TCP_SOCKETS (sock, next_sock)
     {
       struct unacked *unack;
+
+      if (check_time_wait (sock, 1))
+	continue;
+
+      if (sock->unack_first && recv_pending (sock->inf))
+	return;
+
       for (unack = sock->unack_first; unack; unack = unack->next)
 	{
 	  struct tcphdr *tcph;
@@ -973,14 +965,19 @@ grub_net_tcp_retransmit (void)
 	  tcph = (struct tcphdr *) nbd;
 
 	  if ((tcph->flags & TCP_ACK)
-	      && tcph->ack != grub_cpu_to_be32 (sock->rcv.nxt))
+	      && tcph->ack >= grub_cpu_to_be32 (sock->rcv.nxt))
 	    {
 	      dbg ("%d retransmitting previous ack %u\n", sock->local_port,
-		   my_seq (sock, grub_be_to_cpu32 (tcph->ack)));
+		   their_seq (sock, grub_be_to_cpu32 (tcph->ack)));
 	      tcph->checksum = grub_net_ip_transport_checksum (unack->nb,
 							       GRUB_NET_IP_TCP,
 							       &sock->inf->address,
 							       &sock->out_nla);
+	    }
+	  else
+	    {
+	      dbg ("%d retransmitting seq %u\n", sock->local_port,
+		   my_seq (sock, grub_be_to_cpu32 (tcph->seqnr)));
 	    }
 
 	  err = grub_net_send_ip_packet (sock->inf, &(sock->out_nla),
@@ -1247,8 +1244,6 @@ error:
     local_port = 2;
 
   socket->local_port = local_port++;
-  dbg ("%d new source port is %d\n", socket->local_port, socket->local_port);
-
   socket->remote_port = remote_port;
   socket->ll_target_addr = ll_target_addr;
   socket->recv_hook = recv_hook;
@@ -1257,11 +1252,11 @@ error:
   socket->hook_data = hook_data;
   socket->snd.una = socket->iss = grub_get_time_ms ();
   socket->snd.nxt = socket->iss + 1;
-  dbg ("%d our starting sequence is %u\n", socket->local_port, socket->iss);
-  dbg ("%d snd.nxt=%u rcv.nxt:%u snd.una=%u\n", socket->local_port,
+  dbg ("%d snd.nxt=%u rcv.nxt:%u snd.una=%u iss=%u\n", socket->local_port,
        my_seq (socket, socket->snd.nxt),
        their_seq (socket, socket->rcv.nxt),
-       my_seq (socket, socket->snd.una));
+       my_seq (socket, socket->snd.una),
+       socket->iss);
 
   reset_window (socket);
 
@@ -1394,13 +1389,17 @@ grub_net_send_tcp_packet (const grub_net_tcp_socket_t socket,
 }
 
 static void
-prune_acks (grub_net_tcp_socket_t sock, struct tcphdr *tcph)
+prune_acks (grub_net_tcp_socket_t sock, grub_uint32_t acked)
 {
   struct unacked *unack, *next;
-  grub_uint32_t acked = grub_be_to_cpu32 (tcph->ack);
 
-  dbg ("%d looking for unacked packet %u\n",
-       sock->local_port, my_seq (sock, acked));
+  /* this means TCP_ACK was not set on the packet. */
+  if (acked == 0)
+    return;
+
+  if (acked >= sock->snd.una)
+    dbg ("%d looking for unacked packet %u\n",
+	 sock->local_port, my_seq (sock, acked));
   for (unack = sock->unack_first; unack; unack = next)
     {
       grub_uint32_t seqnr;
@@ -1440,15 +1439,351 @@ grub_net_tcp_flush_recv_queue (grub_net_tcp_socket_t sock)
     }
 }
 
-static int
-recv_pending (struct grub_net_network_level_interface *inf)
+static grub_err_t
+process_segment (struct tcp_segment *seg)
 {
-  int rc;
+  grub_err_t err = GRUB_ERR_NONE;
+  grub_size_t win_max, seg_end;
+  grub_uint16_t flags = tcpflags(seg->tcph);
+  int segment_okay = 0;
+  grub_net_tcp_socket_t sock = seg->sock;
 
-  rc = inf->card->driver->recv_pending (inf->card);
-  if (rc < 1)
-    return 0;
-  return rc;
+  win_max = sock->rcv.nxt + seg->wnd;
+  seg_end = seg->seq + seg->len;
+
+#if 0
+  dbg ("%d wnd = %u << %u == %lu\n", sock->local_port,
+	 sock->rcv.wnd, sock->rcv.sca, seg->wnd);
+
+  dbg ("%d win_max = %u + %lu = %u\n", sock->local_port,
+	 their_seq (sock, sock->rcv.nxt), seg->wnd,
+	 their_seq (sock, win_max));
+
+  dbg ("%d seg_end = %u + %u = %lu\n", sock->local_port,
+	 their_seq (sock, seg->seq), seg->len, seg_end);
+#elif 0
+  dbg ("%d rcv.nxt:%u seg_end:%u win_max:%u\n", sock->local_port,
+	 their_seq(sock, sock->rcv.nxt),
+	 their_seq(sock, seg_end),
+	 their_seq(sock, win_max));
+#endif
+
+#if 0
+  /* If we've got an out-of-order packet, we need to re-ack to make sure
+   * the sender is up to date, and our packet queue is invalid. */
+  if (sock->rcv.nxt && seqnr > sock->rcv.nxt)
+    {
+	dbg ("%d OOO %u, expected %u moving on\n", sock->local_port,
+	   their_seq(sock, seqnr), their_seq(sock, sock->rcv.nxt));
+	if (their_seq (sock, seqnr) >> 4 > their_seq (sock, sock->rcv.nxt))
+	  reset (sock);
+	else
+	  {
+	    sock->needs_ack = 1;
+	  }
+	continue;
+    }
+#endif
+
+  //dbg ("%d iss:%u irs:%u\n", sock->local_port, sock->iss, sock->irs);
+  dbg ("%d %s queue %s seq:%u ack:%u len:%u\n", sock->local_port,
+       tcp_state_names[sock->state], flags_str (flags),
+       their_seq (sock, seg->seq), my_seq (sock, seg->ack), seg->len);
+  switch (sock->state)
+    {
+    case CLOSED:
+      dbg ("%d ignoring packet and reaping socket\n", sock->local_port);
+      destroy_socket (sock);
+      return GRUB_ERR_NONE;
+    case LISTEN:
+      dbg ("%d unexpected listen\n", sock->local_port);
+      grub_priority_queue_pop (sock->pq);
+      return GRUB_ERR_NONE;
+    case SYN_SENT:
+      if ((flags & TCP_ACK)
+	  && (seg->ack <= sock->iss || seg->ack > sock->snd.nxt))
+	{
+	  if (!(flags & TCP_RST))
+	    reset (sock);
+	  else
+	    grub_priority_queue_pop (sock->pq);
+	  return GRUB_ERR_NONE;
+	}
+
+      if (flags & TCP_RST)
+	{
+	  if (flags & TCP_ACK)
+	    change_socket_state (sock, CLOSED);
+
+	  grub_priority_queue_pop (sock->pq);
+	  return GRUB_ERR_NONE;
+	}
+
+      if (flags & TCP_SYN)
+	{
+	  sock->irs = seg->seq;
+	  sock->rcv.nxt = seg->seq + 1;
+	  if (flags & TCP_ACK)
+	    sock->snd.una = seg->ack;
+	  dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una=%u\n",
+		 sock->local_port, my_seq (sock, sock->snd.nxt),
+		 their_seq (sock, sock->rcv.nxt),
+		 my_seq (sock, sock->snd.una));
+	  sock->needs_ack = 1;
+	  if (sock->snd.una > sock->iss)
+	    change_socket_state (sock, ESTABLISHED);
+	  else
+	    change_socket_state (sock, SYN_RCVD);
+	}
+      else
+	{
+	  dbg ("%d weird flags? %s (0x%x)\n", sock->local_port,
+		 flags_str(flags), flags);
+	}
+      grub_priority_queue_pop (sock->pq);
+      return GRUB_ERR_NONE;
+    default:
+      break;
+    }
+
+  if (flags & TCP_RST)
+    {
+      switch (sock->state)
+	{
+	case SYN_RCVD:
+	  change_socket_state (sock, CLOSED);
+
+	  /* If we got here, there's nothing we can process in the queue, and
+	   * it's all bad.  Flush it down the drain. */
+	  grub_net_tcp_flush_recv_queue (sock);
+	  return GRUB_ERR_NONE;
+	case ESTABLISHED:
+	  /* fallthrough */
+	case FIN_WAIT_1:
+	  /* fallthrough */
+	case FIN_WAIT_2:
+	  /* fallthrough */
+	case CLOSE_WAIT:
+	  /* fallthrough */
+	  change_socket_state (sock, CLOSED);
+	  reset (sock);
+	  return GRUB_ERR_NONE;
+	case CLOSING:
+	  /* fallthrough */
+	case LAST_ACK:
+	  /* fallthrough */
+	case TIME_WAIT:
+	  grub_priority_queue_pop (sock->pq);
+	  change_socket_state (sock, CLOSED);
+	  return GRUB_ERR_NONE;
+	default:
+	  break;
+	}
+    }
+
+  if ((flags & TCP_SYN) && !(flags & TCP_ACK) && !(flags & TCP_RST))
+    {
+      change_socket_state (sock, CLOSED);
+      reset (sock);
+      return GRUB_ERR_NONE;
+    }
+
+  if (flags & TCP_ACK)
+    {
+      switch (sock->state)
+	{
+	case SYN_RCVD:
+	  if (sock->snd.una > seg->ack || seg->ack > sock->snd.nxt)
+	    {
+	      reset (sock);
+	      return GRUB_ERR_NONE;
+	    }
+
+	  change_socket_state (sock, ESTABLISHED);
+	  return GRUB_ERR_NONE;
+	case ESTABLISHED:
+	  /* fallthrough */
+	case FIN_WAIT_1:
+	  /* fallthrough */
+	case FIN_WAIT_2:
+	  /* fallthrough */
+	case CLOSE_WAIT:
+	  /* fallthrough */
+	case CLOSING:
+	  /* If we have seen this sequence already, just remove it */
+	  if (seg->ack < sock->snd.una)
+	    {
+	      dbg ("%d Ignoring already acked packet %u\n",
+		   sock->local_port, their_seq (sock, seg->seq));
+	      grub_priority_queue_pop (sock->pq);
+	      return GRUB_ERR_NONE;
+	    }
+
+	  if (sock->snd.una < seg->ack && seg->ack <= sock->snd.nxt)
+	    {
+	      prune_acks (sock, seg->ack);
+	      sock->snd.una = seg->ack;
+	      adjust_window (sock, seg);
+	    }
+
+	  if (sock->state == FIN_WAIT_1)
+	    change_socket_state (sock, FIN_WAIT_2);
+	  else if (sock->state == FIN_WAIT_2 && !sock->unack_first)
+	    sock->needs_ack = 1;
+#if 0
+	  grub_priority_queue_pop (sock->pq);
+	  return GRUB_ERR_NONE;
+#endif
+	  break;
+	case LAST_ACK:
+	  destroy_socket (sock);
+	  return GRUB_ERR_NONE;
+	case TIME_WAIT:
+	  grub_priority_queue_pop (sock->pq);
+	  if (flags & TCP_FIN)
+	    {
+	      dbg ("%d acking %u\n", sock->local_port,
+		   their_seq (sock, sock->rcv.nxt));
+	      ack (sock);
+	      sock->needs_ack = 0;
+	      change_socket_state (sock, CLOSED);
+
+	      push_socket_data (sock);
+	      if (sock->fin_hook)
+		sock->fin_hook (sock, sock->hook_data);
+	    }
+	  return GRUB_ERR_NONE;
+	default:
+	  break;
+	}
+    }
+
+  switch (sock->state)
+    {
+    case ESTABLISHED:
+      /* fallthrough */
+    case FIN_WAIT_1:
+      /* fallthrough */
+    case FIN_WAIT_2:
+      /* If we got here, we're actually consuming the packet, so it's
+       * safe to remove it from our ingress queue. */
+      grub_priority_queue_pop (sock->pq);
+
+      /* Eat the header.  If that somehow fails we have no hope of recovery, so
+       * send a reset and get out of here. */
+      err = grub_netbuff_pull (seg->nb, tcplen (seg->tcph->flags));
+      if (err)
+	{
+	  grub_dprintf ("net", "grub_netbuff_pull() failed: %m\n");
+	  reset (sock);
+	  return GRUB_ERR_NONE;
+	}
+
+      if (flags & TCP_SYN && flags & TCP_ACK && !seg->txtlen)
+	{
+	  prune_acks (sock, seg->ack);
+	  sock->needs_ack = 1;
+#if 0
+	  dbg ("%d acking %u\n", sock->local_port,
+	       their_seq (sock, sock->rcv.nxt));
+	  ack (sock);
+#endif
+	}
+
+      segment_okay = 1;
+      if (seg->seq < sock->rcv.nxt || seg->seq >= win_max
+	  || seg_end > win_max || seg_end < sock->rcv.nxt)
+	{
+	  if (seg->seq < sock->rcv.nxt || seg->seq >= win_max)
+	    dbg ("%d ! %u <= %u < %u\n", sock->local_port,
+		 their_seq (sock, sock->rcv.nxt),
+		 their_seq (sock, seg->seq),
+		 their_seq (sock, win_max));
+
+	  if (sock->rcv.nxt > seg_end || seg_end >= win_max)
+	    dbg ("%d ! %u <= %u < %u\n", sock->local_port,
+		 their_seq (sock, sock->rcv.nxt),
+		 their_seq (sock, seg_end),
+		 their_seq (sock, win_max));
+
+	  if (!(flags & TCP_RST))
+	    {
+	      dbg ("%d ignoring bad segment %u, but sending an ACK\n",
+		   sock->local_port, seg->seq);
+	      sock->needs_ack = 1;
+	      grub_net_tcp_process_queue (sock);
+	    }
+	  segment_okay = 0;
+	}
+
+      if (seg->txtlen && segment_okay)
+	{
+	  sock->rcv.nxt += seg->txtlen;
+	  dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una:%u\n",
+	       sock->local_port, my_seq (sock, sock->snd.nxt),
+	       their_seq (sock, sock->rcv.nxt),
+	       my_seq (sock, sock->snd.una));
+	  adjust_window (sock, seg);
+	  sock->needs_ack = 1;
+	  /* If there is data, puts packet in socket list. */
+	  /* XXX we need to fix seg->nb up for segment overlap */
+	  grub_net_put_packet (&sock->packs, seg->nb);
+	  seg->nb = NULL;
+	}
+      break;
+    case CLOSE_WAIT:
+      /* fallthrough */
+    case CLOSING:
+      /* fallthrough */
+    case LAST_ACK:
+      /* fallthrough */
+    case TIME_WAIT:
+      grub_priority_queue_pop (sock->pq);
+      return GRUB_ERR_NONE;
+    default:
+      break;
+    }
+
+  if (flags & TCP_FIN)
+    {
+      switch (sock->state)
+	{
+	case SYN_RCVD:
+	  /* fallthrough */
+	case ESTABLISHED:
+	  change_socket_state (sock, CLOSE_WAIT);
+	  sock->rcv.nxt += 1;
+	  return GRUB_ERR_NONE;
+	case FIN_WAIT_1:
+	  dbg ("%d seg->ack:%u snd.nxt:%u\n", sock->local_port,
+	       their_seq (sock, seg->ack),
+	       my_seq (sock, sock->snd.nxt));
+	  if (seg->ack == sock->snd.nxt)
+	    {
+	      change_socket_state (sock, TIME_WAIT);
+	      prune_acks (sock, seg->ack);
+	      sock->rcv.nxt += 1;
+	      sock->time_wait = grub_get_time_ms () + (sock->ttl * 1000);
+	      sock->needs_ack = 0;
+	    }
+	  return GRUB_ERR_NONE;
+	case FIN_WAIT_2:
+	  change_socket_state (sock, TIME_WAIT);
+	  prune_acks (sock, seg->ack);
+	  sock->rcv.nxt += 1;
+	  sock->time_wait = grub_get_time_ms () + (sock->ttl * 1000);
+	  sock->needs_ack = 1;
+	  return GRUB_ERR_NONE;
+	case TIME_WAIT:
+	  sock->rcv.nxt += 1;
+	  sock->time_wait = grub_get_time_ms () + (sock->ttl * 1000);
+	  return GRUB_ERR_NONE;
+	default:
+	  break;
+	}
+    }
+
+  return GRUB_ERR_NONE;
 }
 
 static grub_err_t
@@ -1456,43 +1791,45 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 {
   struct grub_net_buff **nb_top_p;
   grub_err_t err = GRUB_ERR_NONE;
-  int do_ack = 0;
   int just_closed = 0;
 
   while ((nb_top_p = grub_priority_queue_top (sock->pq)) != NULL)
     {
-      struct grub_net_buff *nb_top = *nb_top_p;
+      struct grub_net_buff *nb = *nb_top_p;
       struct tcphdr *tcph;
-      grub_uint32_t seqnr;
-      grub_ssize_t len, hdrlen, win_max, new_rcv_seq;
       struct tcp_opt *opt;
-      struct tcp_segment seg = { 0, };
+      struct tcp_segment seg;
       grub_uint16_t flags;
 
-      tcph = (struct tcphdr *) nb_top->data;
-      seqnr = grub_be_to_cpu32 (tcph->seqnr);
-      hdrlen = tcplen (tcph->flags);
-      len = pktlen (nb_top) - hdrlen;
-      flags = tcpflags(tcph);
+      if (sock->state == CLOSED)
+	break;
 
-      dbg ("%d processing nb with seqnr %u\n",
-	   sock->local_port, their_seq (sock, seqnr));
+      grub_memset (&seg, 0, sizeof (seg));
 
+      seg.tcph = tcph = (struct tcphdr *) nb->data;
       seg.seq = grub_be_to_cpu32 (tcph->seqnr);
-      seg.ack = grub_be_to_cpu32 (tcph->ack);
-      seg.len = len;
+
+      seg.len = seg.txtlen = pktlen (nb) - tcplen (tcph->flags);
+      seg.nb = nb;
+
 #if 0
-      if (tcpflags(tcph) & TCP_SYN)
-	seg.len += 1;
-      if (tcpflags(tcph) & TCP_FIN)
-	seg.len += 1;
+      dbg ("%d processing nb with seqnr %u len %d\n",
+	   sock->local_port, their_seq (sock, seg.seq), seg.len);
 #endif
+
+      flags = tcpflags(tcph);
+      if (flags & TCP_ACK)
+	seg.ack = grub_be_to_cpu32 (tcph->ack);
+      if (flags & TCP_SYN)
+	seg.len += 1;
+      if (flags & TCP_FIN)
+	seg.len += 1;
 
       FOR_TCP_OPTIONS (tcph, opt)
 	{
 	  struct tcp_scale_opt *scale;
 
-	  dbg ("%d processing tcph (0x%016lx) option %u\n",
+	  dbgw ("%d processing tcph (0x%016lx) option %u\n",
 	       sock->local_port, (unsigned long)tcph, opt->kind);
 
 	  if (opt->kind != 3)
@@ -1504,345 +1841,28 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
 	}
 
       seg.wnd = sock->rcv.wnd << sock->rcv.sca;
-      dbg ("%d wnd = %u << %u == %lu\n", sock->local_port,
-	   sock->rcv.wnd, sock->rcv.sca, seg.wnd);
+      seg.sock = sock;
 
-#if 0
-      /* If we've got an out-of-order packet, we need to re-ack to make sure
-       * the sender is up to date, and our packet queue is invalid. */
-      if (sock->rcv.nxt && seqnr > sock->rcv.nxt)
+      err = process_segment (&seg);
+      if (err)
 	{
-	  dbg ("%d OOO %u, expected %u moving on\n", sock->local_port,
-	       their_seq(sock, seqnr), their_seq(sock, sock->rcv.nxt));
-	  if (their_seq (sock, seqnr) >> 4 >
-	      their_seq (sock, sock->rcv.nxt))
-	      reset (sock);
-	  else
-	    {
-	      do_ack = 1;
-	      sock->queue_bytes -= len;
-	    }
-	  break;
-	}
-#endif
-
-      if (sock->force_ack)
-	{
-	  do_ack = 1;
-	  sock->force_ack = 0;
-	}
-
-      //dbg ("%d iss:%u irs:%u\n", sock->local_port, sock->iss, sock->irs);
-      dbg ("%d %s queue %s seq:%u ack:%u)\n", sock->local_port,
-	   tcp_state_names[sock->state], flags_str (tcph->flags),
-	   their_seq (sock, seg.seq), my_seq (sock, seg.ack));
-      switch (sock->state)
-	{
-	case CLOSED:
-	  dbg ("%d ignoring packet and reaping socket\n", sock->local_port);
+	  dbg ("%d process_segment() = %d (%m) %s\n", sock->local_port,
+	       err, grub_errmsg);
 	  destroy_socket (sock);
-	  return GRUB_ERR_NONE;
-	case LISTEN:
-	  dbg ("%d unexpected listen\n", sock->local_port);
-	  break;
-	case SYN_SENT:
-	  if ((flags & TCP_ACK)
-	      && (seg.ack <= sock->iss || seg.ack > sock->snd.nxt))
-	    {
-	      if (!(flags & TCP_RST))
-		reset (sock);
-
-	      sock->queue_bytes -= len;
-	      break;
-	    }
-
-	  if (flags & TCP_RST)
-	    {
-	      if (tcph->flags & TCP_ACK)
-		change_socket_state (sock, CLOSED);
-
-	      grub_netbuff_free (nb_top);
-	      grub_priority_queue_pop (sock->pq);
-	      sock->queue_bytes -= len;
-	      continue;
-	    }
-
-	  if (flags & TCP_SYN)
-	    {
-	      sock->irs = seg.seq;
-	      sock->rcv.nxt = seg.seq + 1;
-	      if (tcph->flags & TCP_ACK)
-		sock->snd.una = seg.ack;
-	      dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una=%u\n",
-		   sock->local_port, my_seq (sock, sock->snd.nxt),
-		   their_seq (sock, sock->rcv.nxt),
-		   my_seq (sock, sock->snd.una));
-	      prune_acks (sock, tcph);
-	      do_ack = 1;
-	      if (sock->snd.una > sock->iss)
-		change_socket_state (sock, ESTABLISHED);
-	      else
-		change_socket_state (sock, SYN_RCVD);
-	    }
-	  else
-	    {
-	      dbg ("%d weird flags? %s (0x%x)\n", sock->local_port,
-		   flags_str(flags), flags);
-	      grub_netbuff_free (nb_top);
-	      grub_priority_queue_pop (sock->pq);
-	      sock->queue_bytes -= len;
-	      continue;
-	    }
-	  break;
-	default:
 	  break;
 	}
 
-      win_max = sock->rcv.nxt + seg.wnd;
-      dbg ("%d win_max = %u + %lu = %u\n", sock->local_port,
-	   their_seq (sock, sock->rcv.nxt), seg.wnd, their_seq (sock, win_max));
+      if (seg.txtlen == 0)
+	grub_netbuff_free (seg.nb);
 
-      new_rcv_seq = seg.seq + seg.len - 1;
-      dbg ("%d seg_end = %u + %u - 1 = %lu\n", sock->local_port,
-	   their_seq (sock, seg.seq), seg.len, new_rcv_seq);
-
-      int okay = 0;
-      if (sock->rcv.nxt <= seg.seq && seg.seq < win_max)
-	okay = 1;
-      if (sock->rcv.nxt <= new_rcv_seq && new_rcv_seq < win_max)
-	okay = 1;
-      if (!okay)
+      if (sock->state == CLOSED)
 	{
-	  if (sock->rcv.nxt > seg.seq || seg.seq >= win_max)
-	    {
-	      dbg ("%d ! %lu <= %lu < %lu\n", sock->local_port,
-		   their_seq (sock, sock->rcv.nxt),
-		   their_seq (sock, seg.seq),
-		   their_seq (sock, win_max));
-	    }
-	  if (sock->rcv.nxt > new_rcv_seq || new_rcv_seq >= win_max)
-	    {
-	      dbg ("%d ! %lu <= %lu < %lu\n", sock->local_port,
-		   their_seq (sock, sock->rcv.nxt),
-		   their_seq (sock, new_rcv_seq),
-		   their_seq (sock, win_max));
-	    }
-
-	  if (!(flags & TCP_RST))
-	    do_ack = 1;
-
-	  grub_netbuff_free (nb_top);
-	  grub_priority_queue_pop (sock->pq);
-	  sock->queue_bytes -= len;
+	  just_closed = 1;
 	  break;
 	}
-
-      if (flags & TCP_RST)
-	{
-	  switch (sock->state)
-	    {
-	    case SYN_RCVD:
-	      change_socket_state (sock, CLOSED);
-
-	      /* If we got here, there's nothing we can process in the queue,
-	       * and it's all bad.  Flush it down the drain. */
-	      sock->queue_bytes -= len;
-	      grub_net_tcp_flush_recv_queue (sock);
-	      continue;
-	    case ESTABLISHED:
-	      /* fallthrough */
-	    case FIN_WAIT_1:
-	      /* fallthrough */
-	    case FIN_WAIT_2:
-	      /* fallthrough */
-	    case CLOSE_WAIT:
-	      /* fallthrough */
-	      sock->queue_bytes -= len;
-	      grub_net_tcp_flush_recv_queue (sock);
-	      change_socket_state (sock, CLOSED);
-	      reset (sock);
-	      continue;
-	    case CLOSING:
-	      /* fallthrough */
-	    case LAST_ACK:
-	      /* fallthrough */
-	    case TIME_WAIT:
-	      sock->queue_bytes -= len;
-	      grub_net_tcp_flush_recv_queue (sock);
-	      change_socket_state (sock, CLOSED);
-	      continue;
-	    default:
-	      break;
-	    }
-	}
-
-      if (flags & TCP_SYN)
-	{
-	  sock->queue_bytes -= len;
-	  grub_net_tcp_flush_recv_queue (sock);
-	  change_socket_state (sock, CLOSED);
-	  reset (sock);
-	  continue;
-	}
-
-      if (flags & TCP_ACK)
-	{
-	  switch (sock->state)
-	    {
-	    case SYN_RCVD:
-	      if (sock->snd.una > seg.ack || seg.ack > sock->snd.nxt)
-		{
-		  reset (sock);
-		  break;
-		}
-
-	      change_socket_state (sock, ESTABLISHED);
-	      break;
-	    case ESTABLISHED:
-	    case FIN_WAIT_1:
-	    case FIN_WAIT_2:
-	    case CLOSE_WAIT:
-	    case CLOSING:
-	      /* fallthrough */
-	      /* If we have seen this sequence already, just remove it */
-	      if (seg.ack < sock->snd.una)
-		{
-		  dbg ("%d Ignoring already acked packet %u\n",
-		       sock->local_port, their_seq (sock, seqnr));
-		  grub_netbuff_free (nb_top);
-		  grub_priority_queue_pop (sock->pq);
-		  sock->queue_bytes -= len;
-		  continue;
-		}
-
-	      if (sock->snd.una < seg.ack && seg.ack <= sock->snd.nxt)
-		{
-		  sock->snd.una = seg.ack;
-		  prune_acks (sock, tcph);
-
-		  adjust_window (sock, &seg);
-		}
-
-	      if (sock->state == FIN_WAIT_1)
-		change_socket_state (sock, FIN_WAIT_1);
-	      else if (sock->state == FIN_WAIT_2)
-		{
-		  if (!sock->unack_first)
-		    ack (sock);
-		}
-	      break;
-	    case LAST_ACK:
-	      destroy_socket (sock);
-	      return GRUB_ERR_NONE;
-	    case TIME_WAIT:
-	      if (flags & TCP_FIN)
-		{
-		  ack (sock);
-		  sock->time_wait = grub_get_time_ms () + (sock->ttl * 1000);
-		}
-	      break;
-	    default:
-	      break;
-	    }
-	}
-
-      switch (sock->state)
-	{
-	  case ESTABLISHED:
-	    /* fallthrough */
-	  case FIN_WAIT_1:
-	    /* fallthrough */
-	  case FIN_WAIT_2:
-	    /* If we got here, we're actually consuming the packet, so it's
-	     * safe to remove it from our ingress queue. */
-	    grub_priority_queue_pop (sock->pq);
-	    sock->queue_bytes -= len;
-
-	    /* Eat the header.  If that somehow fails we have no hope of
-	     * recovery, so send a reset and get out of here. */
-	    err = grub_netbuff_pull (nb_top, hdrlen);
-	    if (err)
-	      {
-		grub_dprintf ("net", "grub_netbuff_pull() failed: %m\n");
-		reset (sock);
-		break;
-	      }
-
-	    if (len)
-	      {
-		sock->rcv.nxt += len;
-		dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una:%u\n",
-		     sock->local_port, my_seq (sock, sock->snd.nxt),
-		     their_seq (sock, sock->rcv.nxt),
-		     my_seq (sock, sock->snd.una));
-		adjust_window (sock, &seg);
-		do_ack = 1;
-	      }
-	    break;
-	  case CLOSE_WAIT:
-	    /* fallthrough */
-	  case CLOSING:
-	    /* fallthrough */
-	  case LAST_ACK:
-	    /* fallthrough */
-	  case TIME_WAIT:
-	    grub_netbuff_free (nb_top);
-	    grub_priority_queue_pop (sock->pq);
-	    sock->queue_bytes -= len;
-	    continue;
-	  default:
-	    break;
-	}
-
-      if (flags & TCP_FIN)
-	{
-	  switch (sock->state)
-	    {
-	    case SYN_RCVD:
-	      /* fallthrough */
-	    case ESTABLISHED:
-	      change_socket_state (sock, CLOSE_WAIT);
-	      break;
-	    case FIN_WAIT_1:
-	      if (seg.ack == sock->snd.nxt)
-		{
-		  change_socket_state (sock, TIME_WAIT);
-		  prune_acks (sock, tcph);
-		  sock->time_wait = grub_get_time_ms () + (sock->ttl * 1000);
-		}
-	      break;
-	    case FIN_WAIT_2:
-	      change_socket_state (sock, TIME_WAIT);
-	      prune_acks (sock, tcph);
-	      sock->time_wait = grub_get_time_ms () + (sock->ttl * 1000);
-	      break;
-	    case TIME_WAIT:
-	      sock->time_wait = grub_get_time_ms () + (sock->ttl * 1000);
-	      break;
-	    default:
-	      break;
-	    }
-	}
-
-      if (sock->state == TIME_WAIT && grub_get_time_ms() > sock->time_wait)
-	{
-	  dbg ("%d socket timer has expired, closing\n", sock->local_port);
-	  destroy_socket (sock);
-	  return GRUB_ERR_NONE;
-	}
-
-      /* If there is data, puts packet in socket list. */
-      if (len > 0)
-	grub_net_put_packet (&sock->packs, nb_top);
-      else
-	grub_netbuff_free (nb_top);
     }
 
-  /* If we got here, there's nothing we can process in the queue, and it's
-   * all bad.  Flush it down the drain. */
-  grub_net_tcp_flush_recv_queue (sock);
-
-  if (do_ack)
+  if (sock->needs_ack)
     {
       dbg ("%d acking %u\n", sock->local_port, their_seq (sock, sock->rcv.nxt));
       ack (sock);
@@ -1850,18 +1870,10 @@ grub_net_tcp_process_queue (grub_net_tcp_socket_t sock)
     }
 
   /* Now feed our packet data to our real consumer. */
-  while (sock->packs.first)
-    {
-      struct grub_net_buff *nb = sock->packs.first->nb;
-      if (sock->recv_hook)
-	sock->recv_hook (sock, sock->packs.first->nb, sock->hook_data);
-      else
-	grub_netbuff_free (nb);
-      grub_net_remove_packet (sock->packs.first);
-    }
+  push_socket_data (sock);
 
   /* And if we closed, inform them of that as well. */
-  if (sock->fin_hook && just_closed)
+  if (!check_time_wait (sock, 1) && sock->fin_hook && just_closed)
     sock->fin_hook (sock, sock->hook_data);
 
   return err;
@@ -1892,13 +1904,12 @@ handle_listen (struct grub_net_buff *nb, struct tcphdr *tcph,
       change_socket_state (sock, SYN_RCVD);
 
       sock->irs = grub_be_to_cpu32 (tcph->seqnr);
-      dbg ("%d their starting sequence is %u\n", sock->local_port, sock->irs);
       sock->iss = sock->irs + grub_get_time_ms ();
       sock->rcv.nxt = sock->irs + 1;
-      dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una:%u\n",
+      dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una:%u irs=%u\n",
 	   sock->local_port, my_seq (sock, sock->snd.nxt),
 	   their_seq (sock, sock->rcv.nxt),
-	   my_seq (sock, sock->snd.una));
+	   my_seq (sock, sock->snd.una), sock->irs);
       reset_window (sock);
 
       err = listen->listen_hook (listen, sock, listen->hook_data);
@@ -1942,11 +1953,11 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 			  grub_uint8_t ttl)
 {
   struct tcphdr *tcph;
-  struct grub_net_tcp_socket sockbuf;
   grub_net_tcp_socket_t sock, next_sock;
   grub_err_t err;
   grub_ssize_t len, hdrlen;
-  int packet_was_received = 0;
+  static grub_net_tcp_socket_t prev;
+  int received_packet = 0;
 
   /* Ignore broadcast.  */
   if (!inf)
@@ -1978,6 +1989,11 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
     {
       int push = 0, queue = 0;
       grub_net_tcp_listen_t listen;
+      grub_uint16_t flags = tcpflags (tcph);
+      struct tcp_segment seg;
+      struct tcp_opt *opt;
+      grub_size_t win_max, seg_end;
+      int segment_okay = 0;
 
       if (!(grub_be_to_cpu16 (tcph->dst) == sock->local_port
 	    && grub_be_to_cpu16 (tcph->src) == sock->remote_port
@@ -1985,7 +2001,21 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	    && grub_net_addr_cmp (source, &sock->out_nla) == 0))
 	continue;
 
-      packet_was_received = 1;
+      received_packet = 1;
+
+      if (prev && prev != sock)
+	{
+	  if (grub_priority_queue_top (prev->pq) != NULL)
+	    {
+	      dbg ("%d processing queue\n", prev->local_port);
+	      err = grub_net_tcp_process_queue (prev);
+	      if (err)
+		grub_dprintf ("net", "%d error processing packet queue: %m\n",
+			      prev->local_port);
+	    }
+
+	  check_time_wait (prev, 1);
+	}
 
       if (tcph->checksum)
 	{
@@ -2011,28 +2041,84 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 
       /* We do this here just to make the next debug log messages
        * coherent */
-      if (sock->state == SYN_SENT && tcpflags (tcph) == (TCP_SYN|TCP_ACK))
+      if (sock->state == SYN_SENT && flags == (TCP_SYN|TCP_ACK))
 	{
 	  sock->rcv.nxt = sock->irs = grub_be_to_cpu32 (tcph->seqnr);
-	  dbg ("%d their starting sequence is %u\n", sock->local_port,
-	       sock->irs);
-	  dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una:%u\n",
+	  dbg ("%d snd.nxt:%u rcv.nxt=%u snd.una:%u irs=%u\n",
 	       sock->local_port, my_seq (sock, sock->snd.nxt),
 	       their_seq (sock, sock->rcv.nxt),
-	       my_seq (sock, sock->snd.una));
+	       my_seq (sock, sock->snd.una), sock->irs);
 	}
 
       //dbg ("%d iss:%u irs:%u\n", sock->local_port, sock->iss, sock->irs);
       dbg ("%d %s recv %s seq:%u ack:%u\n", sock->local_port,
-	   tcp_state_names[sock->state], flags_str (tcph->flags),
+	   tcp_state_names[sock->state], flags_str (flags),
 	   their_seq (sock, grub_be_to_cpu32 (tcph->seqnr)),
 	   my_seq (sock, grub_be_to_cpu32 (tcph->ack)));
 
-      if (tcph->flags & TCP_PSH)
+      if (flags & TCP_PSH)
 	{
 	  push = 1;
 	  tcph->flags &= ~TCP_PSH;
+	  flags &= ~TCP_PSH;
 	}
+
+      seg.seq = grub_be_to_cpu32 (tcph->seqnr);
+      seg.len = seg.txtlen = pktlen (nb) - tcplen (tcph->flags);
+
+      if (flags & TCP_ACK)
+	seg.ack = grub_be_to_cpu32 (tcph->ack);
+      if (flags & TCP_SYN)
+	seg.len += 1;
+      if (flags & TCP_FIN)
+	seg.len += 1;
+
+      FOR_TCP_OPTIONS (tcph, opt)
+	{
+	  struct tcp_scale_opt *scale;
+
+	  dbgw ("%d processing tcph (0x%016lx) option %u\n",
+	       sock->local_port, (unsigned long)tcph, opt->kind);
+
+	  if (opt->kind != 3)
+	    continue;
+
+	  scale = (struct tcp_scale_opt *)opt;
+	  sock->rcv.wnd = grub_be_to_cpu16 (tcph->window);
+	  sock->rcv.sca = scale->scale;
+	}
+
+      seg.wnd = sock->rcv.wnd << sock->rcv.sca;
+
+      win_max = sock->rcv.nxt + seg.wnd;
+      seg_end = seg.seq + seg.len;
+
+      segment_okay = 1;
+      if (seg.seq < sock->rcv.nxt || seg.seq >= win_max
+	  || seg_end > win_max || seg_end < sock->rcv.nxt)
+	{
+	  if (seg.seq < sock->rcv.nxt || seg.seq >= win_max)
+	    dbg ("%d ! %u <= %u < %u\n", sock->local_port,
+		 their_seq (sock, sock->rcv.nxt),
+		 their_seq (sock, seg.seq),
+		 their_seq (sock, win_max));
+
+	  if (sock->rcv.nxt > seg_end || seg_end >= win_max)
+	    dbg ("%d ! %u <= %u < %u\n", sock->local_port,
+		 their_seq (sock, sock->rcv.nxt),
+		 their_seq (sock, seg_end),
+		 their_seq (sock, win_max));
+
+	  if (!(flags & TCP_RST))
+	    {
+	      dbg ("%d ignoring bad segment %u, but sending an ACK\n",
+		   sock->local_port, their_seq (sock, seg.seq));
+	      sock->needs_ack = 1;
+	      grub_net_tcp_process_queue (sock);
+	    }
+	  segment_okay = 0;
+	}
+
       switch (sock->state)
 	{
 	case CLOSED:
@@ -2073,14 +2159,14 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  queue = 1;
 	  break;
 	default: /* INVALID_STATE */
-	  dbg ("%d socket was in invalid state %d; destroying.\n",
-	       sock->local_port, sock->state);
-	  grub_netbuff_free (nb);
+	  grub_error (GRUB_ERR_BUG,
+		      N_("socket on port %d was in invalid state %d"),
+		      sock->local_port, sock->state);
 	  destroy_socket (sock);
-	  return GRUB_ERR_NONE;
+	  continue;
 	}
 
-      if (queue)
+      if (queue && segment_okay)
 	{
 	  dbg ("%d ingress seq %u ack %u len=%ld\n",
 	       sock->local_port,
@@ -2098,55 +2184,66 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	    }
 	}
 
-      sock->force_ack = 1;
       if (push)
-	dbg ("%d saw push; processing queue immediately\n", sock->local_port);
+	{
+	  dbg ("%d saw push; processing queue immediately\n", sock->local_port);
+	  sock->needs_ack = 1;
+	  dbg ("%d processing queue\n", sock->local_port);
+	  err = grub_net_tcp_process_queue (sock);
+	  if (err)
+	    grub_dprintf ("net", "error processing packet queue: %m\n");
+	}
       else if (recv_pending (inf))
 	{
-	  dbg ("%d recv was pending; not processing queue\n", sock->local_port);
+	  //dbg ("%d recv was pending; not processing queue\n", sock->local_port);
 	  return GRUB_ERR_NONE;
 	}
-      else
-	sock->force_ack = 0;
     }
 
-  if (packet_was_received)
+  FOR_TCP_SOCKETS (sock, next_sock)
     {
-      FOR_TCP_SOCKETS (sock, next_sock)
+      if (grub_priority_queue_top (sock->pq) != NULL)
 	{
-	  if (grub_priority_queue_top (sock->pq) != NULL)
-	    {
-	      dbg ("%d processing queue\n", sock->local_port);
-	      err = grub_net_tcp_process_queue (sock);
-	      if (err)
-		grub_dprintf ("net", "error processing packet queue: %m\n");
-	    }
+	  dbg ("%d processing queue\n", sock->local_port);
+	  err = grub_net_tcp_process_queue (sock);
+	  if (err)
+	    grub_dprintf ("net", "error processing packet queue: %m\n");
 	}
-      return GRUB_ERR_NONE;
+
+      check_time_wait (sock, 1);
     }
 
   prune_closed_sockets ();
+
+  if (received_packet)
+    return GRUB_ERR_NONE;
 
   /* If this isn't an open socket, we send RST or RST|ACK depending on their
    * ack field, unless it's a RST packet, in which case we ignore it. */
   if (!(tcph->flags & TCP_RST))
     {
-      memset (&sockbuf, 0, sizeof (sockbuf));
-      sock = &sockbuf;
+      sock = new_socket (inf, tcph, source);
+      if (!sock)
+	{
+	  grub_netbuff_free (nb);
+	  return grub_errno;
+	}
+
       sock->i_closed = 1;
       sock->they_closed = 1;
       sock->errors = 1;
       sock->i_reseted = 1;
-      sock->local_port = grub_be_to_cpu16 (tcph->src);
-      sock->remote_port = grub_be_to_cpu16 (tcph->dst);
+      sock->local_port = grub_be_to_cpu16 (tcph->dst);
+      sock->remote_port = grub_be_to_cpu16 (tcph->src);
       dbg ("%d unexpected packet; send one of our own.\n", sock->local_port);
       reset_window (sock);
-      sock->rcv.nxt = grub_be_to_cpu32 (tcph->seqnr) + len;
+      sock->irs = sock->rcv.nxt = grub_be_to_cpu32 (tcph->seqnr) + len;
       if (tcph->flags & TCP_ACK)
-	sock->snd.nxt = grub_be_to_cpu32 (tcph->ack);
+	sock->iss = sock->snd.nxt = grub_be_to_cpu32 (tcph->ack);
       else
-	sock->snd.nxt = 0;
+	sock->iss = sock->snd.nxt = 0;
       sock->snd.una = sock->snd.nxt;
+      sock->state = CLOSED;
       dbg ("%d snd.nxt=%u rcv.nxt=%u snd.una=%u\n", sock->local_port,
 	   my_seq (sock, sock->snd.nxt),
 	   their_seq (sock, sock->rcv.nxt),

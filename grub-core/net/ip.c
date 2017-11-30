@@ -457,7 +457,8 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
 	err = grub_netbuff_unput (nb, actual_size - expected_size);
 	if (err)
 	  {
-	    grub_dprintf ("net", "grub_netbuff_unput() = %d\n", err);
+	    grub_dprintf ("net", "grub_netbuff_unput() = %d (%m): %s\n",
+			  err, grub_errmsg);
 	    grub_netbuff_free (nb);
 	    return err;
 	  }
@@ -483,7 +484,8 @@ grub_net_recv_ip4_packets (struct grub_net_buff *nb,
 				    * sizeof (grub_uint32_t)));
       if (err)
 	{
-	  grub_dprintf ("net", "grub_netbuff_pull() = %d\n", err);
+	  grub_dprintf ("net", "grub_netbuff_pull() = %d (%m): %s\n",
+			err, grub_errmsg);
 	  grub_netbuff_free (nb);
 	  return err;
 	}
@@ -750,12 +752,26 @@ grub_net_recv_ip_packets (struct grub_net_buff *nb,
 			  const grub_net_link_level_address_t *src_hwaddress)
 {
   struct iphdr *iph = (struct iphdr *) nb->data;
+  grub_err_t err = GRUB_ERR_NONE;
 
   if ((iph->verhdrlen >> 4) == 4)
-    return grub_net_recv_ip4_packets (nb, card, hwaddress, src_hwaddress);
-  if ((iph->verhdrlen >> 4) == 6)
-    return grub_net_recv_ip6_packets (nb, card, hwaddress, src_hwaddress);
-  grub_dprintf ("net", "Bad IP version: %d\n", (iph->verhdrlen >> 4));
-  grub_netbuff_free (nb);
-  return GRUB_ERR_NONE;
+    {
+      err = grub_net_recv_ip4_packets (nb, card, hwaddress, src_hwaddress);
+      if (err)
+	grub_dprintf ("net", "grub_net_recv_ip4_packets() = %d (%m): %s\n",
+		      err, grub_errmsg);
+    }
+  else if ((iph->verhdrlen >> 4) == 6)
+    {
+      err = grub_net_recv_ip6_packets (nb, card, hwaddress, src_hwaddress);
+      if (err)
+	grub_dprintf ("net", "grub_net_recv_ip6_packets() = %d (%m): %s\n",
+		      err, grub_errmsg);
+    }
+  else
+    {
+      grub_dprintf ("net", "Bad IP version: %d\n", (iph->verhdrlen >> 4));
+      grub_netbuff_free (nb);
+    }
+  return err;
 }
