@@ -243,8 +243,6 @@ grub_net_remove_packet (grub_net_packet_t *pkt)
 
 typedef struct grub_net_app_protocol *grub_net_app_level_t;
 
-typedef struct grub_net_socket *grub_net_socket_t;
-
 struct grub_net_app_protocol 
 {
   struct grub_net_app_protocol *next;
@@ -609,6 +607,8 @@ grub_net_network_level_interface_unregister (struct grub_net_network_level_inter
   inter->next = 0;
   inter->prev = 0;
 }
+
+typedef struct grub_net_socket *grub_net_socket_t;
 
 void
 grub_net_tcp_retransmit (void);

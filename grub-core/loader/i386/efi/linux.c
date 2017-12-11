@@ -160,7 +160,7 @@ static grub_err_t
 grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 		int argc, char *argv[])
 {
-  grub_file_t file = 0;
+  grub_file_t file = NULL;
   struct linux_kernel_header *lh = NULL;
   grub_ssize_t start, filelen;
   void *kernel = NULL;
@@ -195,6 +195,9 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 		  argv[0]);
       goto fail;
     }
+
+  //grub_file_close (file);
+  //file = NULL;
 
   rc = grub_linuxefi_secure_validate (kernel, filelen);
   if (rc < 0)

@@ -32,6 +32,7 @@
 #include <grub/loader.h>
 #include <grub/bufio.h>
 #include <grub/kernel.h>
+#include <grub/backtrace.h>
 
 GRUB_MOD_LICENSE ("GPLv3+");
 
@@ -577,8 +578,10 @@ grub_net_resolve_address (const char *name,
   if (err)
     return err;
   if (!naddresses)
-    grub_error (GRUB_ERR_NET_BAD_ADDRESS, N_("unresolvable address %s"),
-		name);
+    {
+      return grub_error (GRUB_ERR_NET_BAD_ADDRESS,
+			 N_("unresolvable address %s"), name);
+    }
   /* FIXME: use other results as well.  */
   *addr = addresses[0];
   grub_free (addresses);
@@ -1626,7 +1629,7 @@ receive_packets_cb (struct grub_net_card *card,
       err = grub_net_recv_ethernet_packet (nb, card);
       if (err)
 	{
-	  grub_dprintf ("net", "error receiving: %d (%m) %s\n", err, grub_errmsg);
+	  grub_dprintf ("net", "error receiving: %m: %1m\n");
 	  grub_errno = GRUB_ERR_NONE;
 	}
     }
@@ -1703,7 +1706,6 @@ grub_net_poll_cards (unsigned time, int *stop_condition)
 	    return;
 	}
     } while ((grub_get_time_ms () - start_time) < time);
-  grub_dprintf ("net", "processing retransmits\n");
   if (!stop_condition || !*stop_condition)
     grub_net_tcp_retransmit ();
 }
@@ -1729,8 +1731,8 @@ grub_net_poll_cards_cb (unsigned time, int (*stop)(void *data), void *data)
 	    }
 	}
     } while ((grub_get_time_ms () - start_time) < time);
-  grub_dprintf ("net", "processing retransmits\n");
-  grub_net_tcp_retransmit ();
+  if (!stop_condition)
+    grub_net_tcp_retransmit ();
 }
 
 static void
@@ -1910,7 +1912,7 @@ grub_net_search_configfile (char *config)
   grub_size_t config_len;
   char *suffix;
 
-  grub_env_set ("debug", "net,http");
+  grub_env_set ("debug", "net,http,tcp,tcp-segment");
   //grub_env_set ("debug", "http");
 
   auto int search_through (grub_size_t num_tries, grub_size_t slice_size);

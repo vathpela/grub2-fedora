@@ -30,7 +30,7 @@ typedef enum
   } grub_net_ethertype_t;
 
 grub_err_t 
-send_ethernet_packet (struct grub_net_network_level_interface *inf,
+send_ethernet_packet (const struct grub_net_network_level_interface *inf,
 		      struct grub_net_buff *nb,
 		      grub_net_link_level_address_t target_addr,
 		      grub_net_ethertype_t ethertype);

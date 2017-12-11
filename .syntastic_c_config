@@ -1,3 +1,4 @@
+-std=gnu11
 -DHAVE_CONFIG_H
 -Ibuild
 -I.
@@ -5,6 +6,10 @@
 -Iinclude/grub
 -Iinclude/grub/machine
 -Iinclude/grub/cpu
+-iquote
+grub-core/net/
+-iquote
+grub-core/
 -Wall
 -W
 -DGRUB_MACHINE_EFI=1
@@ -96,3 +101,4 @@
 -grecord-gcc-switches
 -m64
 -mtune=generic
+-Wmaybe-uninitialized

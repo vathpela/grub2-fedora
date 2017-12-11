@@ -54,6 +54,10 @@ typedef struct http_data
   int chunked;
   grub_size_t chunk_rem;
   int in_chunk_len;
+
+  int log_initialized;
+  struct grub_term_coordinate log_pos;
+  char previous_sizebuf[10]; /* "XXX.YYYMB" */
 } *http_data_t;
 
 static grub_off_t
@@ -221,70 +225,55 @@ getxy(void)
   return pos;
 }
 
-static struct grub_term_coordinate log_pos = {0, 0};
-static char previous_sizebuf[] = "XXX.YYYMB";
-
 static void
 show_progress (grub_file_t file, http_data_t data)
 {
-  char sizebuf0[] = "XXX.YYYMB", sizebuf1[] = "XXX.YYYMB";
+  char sizebuf0[] = "XXX.YYYMB", sizebuf1[] = "???.???MB";
   char spaces[81] = "                                        "
 		    "                                        ";
-  grub_uint64_t time_ms = grub_get_time_ms ();
+  grub_uint64_t time_ms;
   struct grub_term_coordinate pos;
-  static int once = 1;
-  static char const *previous_file;
-  char const *grub_debug_env = grub_env_get ("debug");
   int y = -1;
+  grub_ssize_t size = have_ahead (file);
 
-  if (time_ms - data->last_progress_report < 1000)
+  if (!grub_debug_enabled ("http"))
+    return;
+
+  if (!size)
+    return;
+
+  time_ms = grub_get_time_ms ();
+  if (time_ms - data->last_progress_report < 500)
     return;
   data->last_progress_report = time_ms;
 
-  if (!grub_debug_env || !grub_strstr (grub_debug_env, "http"))
-    return;
+  if (data->log_initialized == 0)
+    {
+      data->log_pos = getxy();
+      data->log_initialized = 1;
+    }
 
-  if (once)
-    {
-      once = 0;
-      log_pos = getxy();
-    }
-  else if (previous_file && previous_file != data->filename)
-    {
-      log_pos.y += 1;
-    }
   pos = getxy();
+  format_size (have_ahead (file), sizebuf0);
+  if (!grub_strcmp (sizebuf0, data->previous_sizebuf))
+    return;
+  if (file->size != GRUB_FILE_SIZE_UNKNOWN)
+    format_size (file->size, sizebuf1);
 
-  if (file->size == GRUB_FILE_SIZE_UNKNOWN)
-    {
-      format_size (have_ahead (file), sizebuf0);
-      if (grub_strcmp (sizebuf0, previous_sizebuf))
-	{
-	  gotoxy (log_pos);
-	  y = grub_printf ("%s: %s in %lus", data->filename,
-			   sizebuf0, (time_ms - data->start_ms) / 1000);
-	}
-    }
+  if (!grub_env_get("debug"))
+    gotoxy (data->log_pos);
+  y = grub_printf ("%s: %s/%s in %lus", data->filename,
+		   sizebuf0, sizebuf1,
+		   (time_ms - data->start_ms) / 1000);
+
+  if (y > 1)
+    grub_printf ("%s", spaces+(y-1 % 80));
+
+  if (grub_env_get("debug"))
+    grub_printf ("\n");
   else
-    {
-      format_size (have_ahead (file), sizebuf0);
-      if (grub_strcmp (sizebuf0, previous_sizebuf))
-	{
-	  gotoxy (log_pos);
-	  format_size (file->size, sizebuf1);
-	  y = grub_printf ("%s: %s/%s in %lus", data->filename,
-			   sizebuf0, sizebuf1,
-			   (time_ms - data->start_ms) / 1000);
-	}
-    }
-
-  if (y != -1)
-    {
-      grub_printf ("%s", spaces+(y % 80));
-      gotoxy (pos);
-    }
-
-  grub_strcpy (previous_sizebuf, sizebuf0);
+    gotoxy (pos);
+  grub_strcpy (data->previous_sizebuf, sizebuf0);
 }
 
 static grub_err_t
@@ -325,7 +314,7 @@ http_receive (grub_net_tcp_socket_t sock __attribute__ ((unused)),
 	      grub_net_tcp_close (data->sock, GRUB_NET_TCP_ABORT);
 	      return grub_errno;
 	    }
-	      
+
 	  data->current_line = t;
 	  grub_memcpy (data->current_line + data->current_line_len,
 		       nb->data, ptr - (char *) nb->data);
@@ -551,6 +540,9 @@ http_establish (struct grub_file *file, grub_off_t offset, int initial)
 
   for (i = 0; !data->headers_recv && i < 100; i++)
     {
+      if (grub_net_tcp_socket_unacked (data->sock))
+	grub_net_tcp_socket_ack (data->sock);
+
       grub_net_poll_cards (300, &data->headers_recv);
     }
 

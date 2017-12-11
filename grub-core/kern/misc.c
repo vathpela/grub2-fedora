@@ -1166,7 +1166,16 @@ grub_vsnprintf_real (char *str, grub_size_t max_len, const char *fmt0,
 	  break;
 
 	case 'm':
-	  p = grub_strerror(grub_errno);
+	  n -= 1;
+	  switch (format1)
+	    {
+	    case 1:
+	      p = grub_errmsg;
+	      break;
+	    default:
+	      p = grub_strerror(grub_errno);
+	      break;
+	    }
 	  /* fallthrough */
 	case 's':
 	  {
@@ -1292,8 +1301,10 @@ grub_abort (void)
 {
 #ifndef GRUB_UTIL
   grub_backtrace (1);
+#else
+  grub_printf ("\n");
 #endif
-  grub_printf ("\nAborted.");
+  grub_printf ("Aborted.");
 
 #ifndef GRUB_UTIL
   if (grub_term_inputs)
@@ -1320,6 +1331,7 @@ grub_fatal (const char *fmt, ...)
 {
   va_list ap;
 
+  grub_printf ("\n");
   va_start (ap, fmt);
   grub_vprintf (_(fmt), ap);
   va_end (ap);

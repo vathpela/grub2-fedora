@@ -74,3 +74,10 @@ void grub_backtrace (unsigned long skip)
 {
   grub_backtrace_arch(skip + 1);
 }
+
+void grub_debug_backtrace (const char * const debug,
+			   unsigned long skip)
+{
+  if (grub_debug_enabled (debug))
+    grub_backtrace (skip + 1);
+}

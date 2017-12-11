@@ -26,6 +26,7 @@
 #include <grub/env.h>
 #include <grub/time.h>
 #include <grub/net/arp.h>
+#include <grub/lib/hexdump.h>
 
 #define LLCADDRMASK 0x7f
 
@@ -43,7 +44,7 @@ struct snaphdr
 } GRUB_PACKED;
 
 grub_err_t
-send_ethernet_packet (struct grub_net_network_level_interface *inf,
+send_ethernet_packet (const struct grub_net_network_level_interface *inf,
 		      struct grub_net_buff *nb,
 		      grub_net_link_level_address_t target_addr,
 		      grub_net_ethertype_t ethertype)
@@ -141,6 +142,7 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
 
   if (type <= 1500)
     {
+      grub_dprintf ("net", "type was 0x%0x\n", type);
       llch = (struct llchdr *) nb->data;
       type = llch->dsap & LLCADDRMASK;
 
