@@ -177,7 +177,11 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 
   file = grub_file_open (argv[0]);
   if (! file)
-    goto fail;
+    {
+      grub_dprintf ("linuxefi", "grub_file_open(\"%s\"): %m: %1m\n",
+		    argv[0]);
+      goto fail;
+    }
 
   filelen = grub_file_size (file);
 
@@ -191,6 +195,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 
   if (grub_file_read (file, kernel, filelen) != filelen)
     {
+      grub_dprintf ("linuxefi", "grub_file_read(): %m: %1m\n");
       grub_error (GRUB_ERR_FILE_READ_ERROR, N_("Can't read kernel %s"),
 		  argv[0]);
       goto fail;
@@ -202,6 +207,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
   rc = grub_linuxefi_secure_validate (kernel, filelen);
   if (rc < 0)
     {
+      grub_dprintf ("linuxefi", "grub_linuxefi_secure_validate(): %m: %1m\n");
       grub_error (GRUB_ERR_INVALID_COMMAND, N_("%s has invalid signature"),
 		  argv[0]);
       goto fail;

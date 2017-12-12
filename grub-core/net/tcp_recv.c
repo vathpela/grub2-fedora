@@ -27,37 +27,45 @@
 #include "tcp.h"
 
 static int
-tcp (struct tcp_segment *seg)
+tcp (struct tcp_segment *seg, int *stop)
 {
   grub_err_t err = GRUB_ERR_NONE;
   grub_uint16_t flags = tcpflags(seg->tcph);
   grub_net_tcp_socket_t sock = seg->sock;
   grub_size_t win_max, seg_end;
-  int segment_okay = 0;
+  int segment_okay = 1;
 
-  win_max = sock->rcv.nxt + seg->wnd;
+  //dbg ("%d iss:%u irs:%u\n", sock->local_port, sock->iss, sock->irs);
+  dbgs ("%d %s queue %s seq:%u ack:%u len:%u\n", sock->local_port,
+	tcp_state_names[sock->state], flags_str (flags),
+	their_seq (sock, seg->seq), my_seq (sock, seg->ack), seg->len);
+
+  win_max = sock->rcv.nxt + (sock->rcv.wnd << sock->rcv.sca);
   seg_end = seg->seq + seg->len;
 
-  segment_okay = 1;
   if (seg->seq < sock->rcv.nxt || seg->seq >= win_max
       || seg_end > win_max || seg_end < sock->rcv.nxt)
     {
       if (seg->seq < sock->rcv.nxt || seg->seq >= win_max)
-	dbg ("%d ! %u <= %u < %u\n", sock->local_port,
-	     their_seq (sock, sock->rcv.nxt),
-	     their_seq (sock, seg->seq),
-	     their_seq (sock, win_max));
+	{
+	dbgs ("%d ! %u <= %u < %u\n", sock->local_port,
+	      their_seq (sock, sock->rcv.nxt),
+	      their_seq (sock, seg->seq),
+	      their_seq (sock, win_max));
+	dbgs("%d seg->seq:%u sock->rcv.nxt:%u win_max:%lu\n", sock->local_port,
+	     seg->seq, sock->rcv.nxt, win_max);
+	}
 
-      if (sock->rcv.nxt > seg_end || seg_end >= win_max)
-	dbg ("%d ! %u <= %u < %u\n", sock->local_port,
-	     their_seq (sock, sock->rcv.nxt),
-	     their_seq (sock, seg_end),
-	     their_seq (sock, win_max));
+      if (seg_end > win_max || seg_end < sock->rcv.nxt)
+	dbgs ("%d ! %u <= %u < %u\n", sock->local_port,
+	      their_seq (sock, sock->rcv.nxt),
+	      their_seq (sock, seg_end),
+	      their_seq (sock, win_max));
 
       segment_okay = 0;
     }
 
-  //dbg ("%d iss:%u irs:%u\n", sock->local_port, sock->iss, sock->irs);
+#if 0
   dbgs ("%d seg.seq:%u rcv.nxt:%u win_max:%u seg_end:%u ok:%d\n",
 	sock->local_port,
 	their_seq (sock, seg->seq),
@@ -65,6 +73,43 @@ tcp (struct tcp_segment *seg)
 	their_seq (sock, win_max),
 	their_seq (sock, seg_end),
 	segment_okay);
+#endif
+
+  if (!segment_okay)
+    {
+      if (seg_end <= sock->rcv.nxt)
+	{
+	  adjust_recv_window (sock, seg->txtlen);
+	  grub_priority_queue_pop (sock->receive);
+	  return GRUB_ERR_NONE;
+	}
+      //dbg ("%d iss:%u irs:%u\n", sock->local_port, sock->iss, sock->irs);
+      dbgs ("%d segment was not okay, sending a %s\n", sock->local_port,
+	    seg->tcph->flags & TCP_RST ? "RST" : "ACK");
+      if (seg->tcph->flags & TCP_RST)
+	reset (sock);
+      else
+	ack (sock, sock->rcv.nxt);
+      *stop = 1;
+      return GRUB_ERR_NONE;
+    }
+  else if (seg->seq > sock->rcv.nxt)
+    {
+#if 0
+      int x = sock->i_stall;
+      sock->i_stall = 1;
+
+      dbgs ("%d segment %u from the future, re-ACKing\n",
+	    sock->local_port, their_seq (sock, seg->seq));
+      ack (sock, sock->rcv.nxt);
+      sock->i_stall = x;
+#else
+      dbgs ("%d segment %u from the future, re-queuing\n",
+	    sock->local_port, their_seq (sock, seg->seq));
+#endif
+      *stop = 1;
+      return GRUB_ERR_NONE;
+    }
 
 #if 0
   /* If we've got an out-of-order packet, we need to re-ack to make sure
@@ -82,11 +127,6 @@ tcp (struct tcp_segment *seg)
 	continue;
     }
 #endif
-
-  //dbg ("%d iss:%u irs:%u\n", sock->local_port, sock->iss, sock->irs);
-  dbgq ("%d %s queue %s seq:%u ack:%u len:%u\n", sock->local_port,
-	tcp_state_names[sock->state], flags_str (flags),
-	their_seq (sock, seg->seq), my_seq (sock, seg->ack), seg->len);
   switch (sock->state)
     {
     case CLOSED:
@@ -220,17 +260,6 @@ tcp (struct tcp_segment *seg)
 	      return GRUB_ERR_NONE;
 	    }
 
-	      dbgs ("%d snd.una:%u seg.ack:%u snd.nxt:%u\n", sock->local_port,
-		    my_seq (sock, sock->snd.una),
-		    my_seq (sock, seg->ack),
-		    my_seq (sock, sock->snd.nxt));
-	  if (sock->snd.una > seg->ack || seg->ack > sock->snd.nxt)
-	    {
-	      grub_printf ("got an ack from the future; re-acking.\n");
-	      sock->needs_ack = 1;
-	      return GRUB_ERR_NONE;
-	    }
-
 	  prune_acks (sock, seg);
 
 	  if (sock->state == FIN_WAIT_1)
@@ -300,8 +329,19 @@ tcp (struct tcp_segment *seg)
 
       if (seg->txtlen)
 	{
-	  sock->rcv.nxt += seg->txtlen;
-	//  sock->rcv.nxt = 
+	  grub_size_t prefix = 0, txtlen = seg->txtlen;
+	  if (seg->seq < sock->rcv.nxt)
+	    {
+	      prefix = sock->rcv.nxt - seg->seq;
+	      txtlen -= prefix;
+	      dbgs ("%d segment %u is %lu bytes before %u, eating\n",
+		    sock->local_port,
+		    their_seq (sock, seg->seq),
+		    prefix,
+		    their_seq (sock, sock->rcv.nxt));
+	      grub_netbuff_pull (seg->nb, prefix);
+	    }
+	  sock->rcv.nxt += txtlen;
 #if 0
 	  if (sock->rcv.nxt > seg->seq - seg->wnd - seg->txtlen)
 	    {
@@ -318,7 +358,8 @@ tcp (struct tcp_segment *seg)
 		sock->local_port, my_seq (sock, sock->snd.nxt),
 		their_seq (sock, sock->rcv.nxt),
 		my_seq (sock, sock->snd.una));
-	  adjust_window (sock, seg);
+	  adjust_send_window (sock, seg);
+	  adjust_recv_window (sock, seg->txtlen);
 	  sock->needs_ack = 1;
 	  /* If there is data, puts packet in socket list. */
 	  /* XXX we need to fix seg->nb up for segment overlap */
@@ -385,7 +426,6 @@ tcp (struct tcp_segment *seg)
   return GRUB_ERR_NONE;
 }
 
-
 /*
  * Nothing above here is ever allowed to do the following to the /received/
  * packet data:
@@ -411,6 +451,7 @@ process_one_queue (grub_net_tcp_socket_t sock, int nsegments)
       struct tcp_opt *opt;
       struct tcp_segment seg;
       grub_uint16_t flags;
+      int stop = 0;
 
       if (sock->state == CLOSED)
 	{
@@ -445,6 +486,7 @@ process_one_queue (grub_net_tcp_socket_t sock, int nsegments)
       if (flags & TCP_FIN)
 	seg.len += 1;
 
+      seg.wnd = 0;
       FOR_TCP_OPTIONS (tcph, opt)
 	{
 	  struct tcp_scale_opt *scale;
@@ -456,11 +498,14 @@ process_one_queue (grub_net_tcp_socket_t sock, int nsegments)
 	    continue;
 
 	  scale = (struct tcp_scale_opt *)opt;
-	  sock->rcv.wnd = grub_be_to_cpu16 (tcph->window);
-	  sock->rcv.sca = scale->scale;
+	  seg.wnd = grub_be_to_cpu16 (tcph->window) << scale->scale;
+	  sock->snd.sca = scale->scale;
 	}
+      if (seg.wnd == 0)
+	seg.wnd = grub_be_to_cpu16 (tcph->window);
 
-      seg.wnd = sock->rcv.wnd << sock->rcv.sca;
+      adjust_send_window (sock, &seg);
+
       seg.sock = sock;
 
       if (sock->needs_retransmit)
@@ -472,7 +517,7 @@ process_one_queue (grub_net_tcp_socket_t sock, int nsegments)
 	    }
 	}
 
-      err = tcp (&seg);
+      err = tcp (&seg, &stop);
       if (err)
 	{
 	  grub_printf ("%d tcp() = %d (%m) %s\n", sock->local_port,
@@ -481,6 +526,9 @@ process_one_queue (grub_net_tcp_socket_t sock, int nsegments)
 	  seg.nb = NULL;
 	  break;
 	}
+
+      if (stop)
+	break;
 
 #if 0
       if (seg.txtlen == 0)
@@ -496,6 +544,16 @@ process_one_queue (grub_net_tcp_socket_t sock, int nsegments)
 	  break;
 	}
     }
+
+#if 0
+  nb_top_p = grub_priority_queue_top (sock->receive);
+
+  if (sock->rc
+	{
+	  struct grub_net_buff *nb = *nb_top_p;
+
+	  if (sock->rcv.nxt < 
+#endif
 
   if (sock->needs_ack)
     {
@@ -617,9 +675,6 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
       int queue = 0;
       grub_uint16_t flags = tcpflags (tcph);
       struct tcp_segment seg;
-      struct tcp_opt *opt;
-      grub_size_t win_max, seg_end;
-      int segment_okay = 0;
 
       if (grub_be_to_cpu16 (tcph->dst) != sock->local_port)
 	continue;
@@ -706,6 +761,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
       if (flags & TCP_FIN)
 	seg.len += 1;
 
+#if 0
       FOR_TCP_OPTIONS (tcph, opt)
 	{
 	  struct tcp_scale_opt *scale;
@@ -717,16 +773,32 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	    continue;
 
 	  scale = (struct tcp_scale_opt *)opt;
+#if 1
+	  rcv_wnd = grub_be_to_cpu16 (tcph->window);
+	  rcv_sca = scale->scale;
+	}
+
+      seg.wnd = rcv_wnd << rcv_sca;
+#else
 	  sock->rcv.wnd = grub_be_to_cpu16 (tcph->window);
 	  sock->rcv.sca = scale->scale;
 	}
 
       seg.wnd = sock->rcv.wnd << sock->rcv.sca;
+#endif
 
       win_max = sock->rcv.nxt + seg.wnd;
       seg_end = seg.seq + seg.len;
 
       segment_okay = 1;
+	    dbg ("%d ! %u <= %u < %u\n", sock->local_port,
+		 their_seq (sock, sock->rcv.nxt),
+		 their_seq (sock, seg.seq),
+		 their_seq (sock, win_max));
+	    dbg ("%d ! %u <= %u < %u\n", sock->local_port,
+		 their_seq (sock, sock->rcv.nxt),
+		 their_seq (sock, seg_end),
+		 their_seq (sock, win_max));
       if (seg.seq < sock->rcv.nxt || seg.seq >= win_max
 	  || seg_end > win_max || seg_end < sock->rcv.nxt)
 	{
@@ -753,6 +825,7 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  segment_okay = 0;
 	}
 
+#endif
       switch (sock->state)
 	{
 	case CLOSED:
@@ -793,10 +866,11 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	  continue;
 	}
 
-      if (queue && segment_okay)
+      if (queue /* && segment_okay */)
 	{
 	  dbgs ("%d ingress seq %u ack %u len=%ld\n", sock->local_port,
 		their_seq (sock, seg.seq), my_seq (sock, seg.ack), len);
+	  adjust_recv_window (sock, -len);
 
 	  err = grub_priority_queue_push (sock->receive, &nb);
 	  if (err)
@@ -868,12 +942,12 @@ grub_net_recv_tcp_packet (struct grub_net_buff *nb,
 	sock->iss = sock->snd.nxt = 0;
       sock->snd.una = sock->snd.nxt;
       sock->state = CLOSED;
-      dbgs ("%d snd.nxt=%u rcv.nxt=%u snd.una=%u\n", sock->local_port,
+      dbg ("%d snd.nxt=%u rcv.nxt=%u snd.una=%u\n", sock->local_port,
 	    my_seq (sock, sock->snd.nxt),
 	    their_seq (sock, sock->rcv.nxt),
 	    my_seq (sock, sock->snd.una));
-      grub_printf ("unsolicited packet for socket we don't have; reseting.\n");
-      reset (sock);
+      dbg ("unsolicited packet for socket we don't have; ignoring.\n");
+      //reset (sock);
     }
 
   grub_netbuff_free (nb);

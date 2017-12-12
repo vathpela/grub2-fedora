@@ -119,6 +119,9 @@ struct grub_net_tcp_socket
   int needs_retransmit;
   int i_stall;
   int they_push;
+  grub_size_t position;
+  grub_size_t expected_size;
+  grub_size_t queued;
 
   grub_net_tcp_recv_hook recv_hook;
   grub_net_tcp_error_hook error_hook;
@@ -274,7 +277,10 @@ extern grub_err_t change_socket_state_real (grub_net_tcp_socket_t sock,
 #define change_socket_state(sock, new_state) change_socket_state_real (sock, new_state, GRUB_FILE, __LINE__)
 
 extern grub_uint64_t minimum_window (grub_net_tcp_socket_t sock);
-extern void adjust_window (grub_net_tcp_socket_t sock, struct tcp_segment *seg);
+extern void adjust_recv_window (grub_net_tcp_socket_t sock,
+				grub_int32_t howmuch);
+extern void adjust_send_window (grub_net_tcp_socket_t sock,
+				struct tcp_segment *seg);
 extern void reset_window (grub_net_tcp_socket_t sock);
 int reap_time_wait (grub_net_tcp_socket_t sock);
 int destroy_closed (grub_net_tcp_socket_t sock);

@@ -95,10 +95,10 @@ minimum_window (grub_net_tcp_socket_t sock)
 }
 
 void
-adjust_window (grub_net_tcp_socket_t sock, struct tcp_segment *seg)
+adjust_send_window (grub_net_tcp_socket_t sock, struct tcp_segment *seg)
 {
-  grub_uint64_t scale = sock->snd.sca;
-  grub_uint64_t window = sock->snd.wnd;
+  grub_uint64_t scale = sock->rcv.sca;
+  grub_uint64_t window = sock->rcv.wnd;
   grub_uint64_t scaled;
   grub_uint64_t maximum = 0x8000ULL * (1ULL << 48);
   grub_uint64_t minimum = minimum_window (sock);
@@ -124,7 +124,7 @@ adjust_window (grub_net_tcp_socket_t sock, struct tcp_segment *seg)
 
       if (scale != sock->snd.sca || window != sock->snd.wnd)
 	{
-	  dbgw ("%d rescaling %u*%u (%x) -> %lu*%u (0x%lx)\n", sock->local_port,
+	  dbgw ("%d rescaling send %u*%u (%x) -> %lu*%u (0x%lx)\n", sock->local_port,
 		sock->snd.wnd, 1 << sock->snd.sca,
 		sock->snd.wnd * (1 << sock->snd.sca),
 		window, 1 << scale, window * (1 << scale));
@@ -135,22 +135,57 @@ adjust_window (grub_net_tcp_socket_t sock, struct tcp_segment *seg)
 }
 
 void
+adjust_recv_window (grub_net_tcp_socket_t sock, grub_int32_t howmuch)
+{
+  grub_uint64_t scale = sock->rcv.sca;
+  grub_uint64_t window = sock->rcv.wnd;
+  grub_uint64_t scaled;
+  grub_uint64_t maximum = 0x8000ULL * (1ULL << 48);
+  grub_uint64_t minimum = minimum_window (sock);
+
+  scaled = window << scale;
+  scaled += howmuch;
+
+  if (scaled > maximum)
+    scaled = maximum;
+  if (scaled < minimum)
+    scaled = minimum;
+
+  /* and then compute a new window from that */
+  for (scale = 0; scale < 0xff; scale++)
+    if (scaled >> scale < 0xffff)
+      break;
+  window = scaled >> scale;
+  if (scale != sock->rcv.sca || window != sock->rcv.wnd)
+    {
+      sock->rcv.sca = scale;
+      sock->rcv.wnd = window;
+
+      dbgw ("%d setting recv window to %u << %u = (%lu) (howmuch=%d)\n",
+	    sock->local_port,
+	    sock->rcv.wnd, sock->rcv.sca,
+	    (unsigned long)sock->rcv.wnd << sock->rcv.sca,
+	    howmuch);
+    }
+}
+
+void
 reset_window (grub_net_tcp_socket_t sock)
 {
-  grub_uint64_t scale = 1 << sock->snd.sca;
-  grub_uint64_t window = sock->snd.wnd;
+  grub_uint64_t scale = 1 << sock->rcv.sca;
+  grub_uint64_t window = sock->rcv.wnd;
   grub_uint64_t scaled;
   grub_uint64_t maximum = 0x8000ULL * (1ULL << 48);
   grub_uint64_t minimum = minimum_window (sock);
   grub_uint64_t howmuch;
 
-  sock->snd.sca = 0;
-  sock->snd.wnd = 0;
+  sock->rcv.sca = 0;
+  sock->rcv.wnd = 0;
 
   howmuch = min(sock->inf->card->mtu, 1500)
 	   - GRUB_NET_OUR_IPV4_HEADER_SIZE
 	   - sizeof (struct tcphdr);
-  howmuch = howmuch * 100;
+  howmuch = howmuch * 20;
   howmuch = ALIGN_UP(howmuch, 4096);
 
   /* Add our modifier to the total */
@@ -165,14 +200,14 @@ reset_window (grub_net_tcp_socket_t sock)
     if (scaled >> scale < 0xffff)
       break;
   window = scaled >> scale;
-  if (scale != sock->snd.sca || window != sock->snd.wnd)
+  if (scale != sock->rcv.sca || window != sock->rcv.wnd)
     {
-      sock->snd.sca = scale;
-      sock->snd.wnd = window;
+      sock->rcv.sca = scale;
+      sock->rcv.wnd = window;
 
-      dbgw ("%d setting window to %u << %u = (%lu)\n", sock->local_port,
-	    sock->snd.wnd, sock->snd.sca,
-	    (unsigned long)sock->snd.wnd << sock->snd.sca);
+      dbgw ("%d setting send window to %u << %u = (%lu)\n", sock->local_port,
+	    sock->rcv.wnd, sock->rcv.sca,
+	    (unsigned long)sock->rcv.wnd << sock->rcv.sca);
     }
 }
 
@@ -196,11 +231,13 @@ seqcmp (const void *a__, const void *b__)
   struct grub_net_buff *b_ = *(struct grub_net_buff **) b__;
   struct tcphdr *a = (struct tcphdr *) a_->data;
   struct tcphdr *b = (struct tcphdr *) b_->data;
+  grub_uint32_t aseq = grub_be_to_cpu32 (a->seqnr);
+  grub_uint32_t bseq = grub_be_to_cpu32 (b->seqnr);
 
   /* We want the first elements to be on top.  */
-  if (before (a->seqnr, b->seqnr))
+  if (before (aseq, bseq))
     return +1;
-  if (after (a->seqnr, b->seqnr))
+  if (after (aseq, bseq))
     return -1;
   return 0;
 }
@@ -409,6 +446,8 @@ push_socket_data (grub_net_tcp_socket_t sock)
   while (sock->packs.first)
     {
       struct grub_net_buff *nb = sock->packs.first->nb;
+      sock->position += nb->tail - nb->data;
+      sock->queued -= nb->tail - nb->data;
       if (sock->recv_hook)
 	sock->recv_hook (sock, sock->packs.first->nb, sock->hook_data);
       else
@@ -544,6 +583,21 @@ is_closed (void *data)
   grub_net_tcp_socket_t sock = (grub_net_tcp_socket_t)data;
 
   return sock->state == CLOSED;
+}
+
+void
+grub_net_tcp_socket_advise (grub_net_tcp_socket_t sock,
+			    grub_size_t size)
+{
+  if (sock->expected_size != size)
+    {
+      grub_size_t howmuch = size - sock->position - sock->queued
+			    - (sock->rcv.wnd << sock->rcv.sca);
+
+      sock->expected_size = size;
+      dbgw ("new expected file size %lu; scaling by %lu\n", size, howmuch);
+      adjust_recv_window (sock, howmuch);
+    }
 }
 
 void

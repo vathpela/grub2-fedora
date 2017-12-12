@@ -185,7 +185,7 @@ net/drivers/efi/efinet.c:255: 1.457 st=0 hsz=14 sz=60 (0 msec)
       grub_dprintf ("efinet", "buffer of %lu was too small for %lu packet\n",
 		    dev->rcvbufsize, bufsize);
       grub_free (dev->rcvbuf);
-      dev->rcvbufsize = 2 * ALIGN_UP (dev->rcvbufsize > headersize + bufsize
+      dev->rcvbufsize = 4 * ALIGN_UP (dev->rcvbufsize > headersize + bufsize
 				      ? dev->rcvbufsize
 				      : headersize + bufsize, 64);
       dev->rcvbuf = grub_zalloc (dev->rcvbufsize);
@@ -239,7 +239,7 @@ get_card_packet (struct grub_net_card *dev)
 	  grub_dprintf ("efinet",
 			"buffer of %lu was too small for %lu packet\n",
 			dev->rcvbufsize, bufsize);
-	  dev->rcvbufsize = 2 * ALIGN_UP(dev->rcvbufsize > headersize + bufsize
+	  dev->rcvbufsize = 4*ALIGN_UP(dev->rcvbufsize > headersize + bufsize
 					  ? dev->rcvbufsize
 					  : headersize + bufsize, 64);
 	  grub_free (dev->rcvbuf);
@@ -468,7 +468,7 @@ grub_efinet_findcards (void)
 	}
       card->txbusy = 0;
 
-      card->rcvbufsize = ALIGN_UP (card->mtu, 64) + 256;
+      card->rcvbufsize = 4 * ALIGN_UP (card->mtu, 64) + 256;
       card->rcvbuf = grub_zalloc (card->rcvbufsize);
 
       card->name = grub_xasprintf ("efinet%d", i++);

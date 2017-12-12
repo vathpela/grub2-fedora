@@ -44,6 +44,9 @@ grub_net_tcp_open (char *server,
 		   grub_net_tcp_error_hook error_hook,
 		   grub_net_tcp_fin_hook fin_hook,
 		   void *hook_data);
+void
+grub_net_tcp_socket_advise (grub_net_tcp_socket_t sock,
+			    grub_size_t size);
 
 grub_net_tcp_socket_t
 grub_net_tcp_listen (grub_uint16_t port,

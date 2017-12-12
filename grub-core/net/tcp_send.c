@@ -126,7 +126,7 @@ error:
   if (ack)
     {
       err = add_window_scale (nb_ack, tcph_ack, &hdrsize,
-			      sock->snd.sca);
+			      sock->rcv.sca);
       if (err)
 	goto error;
 
@@ -140,7 +140,7 @@ error:
 	    their_seq (sock, sock->rcv.nxt),
 	    my_seq (sock, sock->snd.una));
 
-      tcph_ack->window = !sock->i_stall ? grub_cpu_to_be16 (sock->snd.wnd)
+      tcph_ack->window = !sock->i_stall ? grub_cpu_to_be16 (sock->rcv.wnd)
 	: 0;
     }
   else
@@ -338,7 +338,7 @@ prune_acks (grub_net_tcp_socket_t sock, struct tcp_segment *seg)
     }
 
   sock->snd.una = seg->ack;
-  adjust_window (sock, seg);
+  adjust_send_window (sock, seg);
 }
 
 
@@ -387,7 +387,7 @@ grub_net_send_tcp_packet (const grub_net_tcp_socket_t socket,
       tcph = (struct tcphdr *) nb2->data;
       tcph->ack = grub_cpu_to_be32 (socket->rcv.nxt);
       tcph->flags = tcpsize (sizeof *tcph) | TCP_ACK;
-      tcph->window = !socket->i_stall ? grub_cpu_to_be16 (socket->snd.wnd)
+      tcph->window = !socket->i_stall ? grub_cpu_to_be16 (socket->rcv.wnd)
 	: 0;
       tcph->urgent = 0;
       err = grub_netbuff_put (nb2, fraglen);
@@ -414,7 +414,7 @@ grub_net_send_tcp_packet (const grub_net_tcp_socket_t socket,
   tcph = (struct tcphdr *) nb->data;
   tcph->ack = grub_cpu_to_be32 (socket->rcv.nxt);
   tcph->flags = tcpsize (sizeof *tcph) | TCP_ACK | (push ? TCP_PSH : 0);
-  tcph->window = !socket->i_stall ? grub_cpu_to_be16 (socket->snd.wnd) : 0;
+  tcph->window = !socket->i_stall ? grub_cpu_to_be16 (socket->rcv.wnd) : 0;
   tcph->urgent = 0;
   return tcp_send (nb, socket);
 }
@@ -588,6 +588,13 @@ grub_net_tcp_open (char *server,
   else if (local_port == 65535)
     local_port = 2;
 
+  if (addr.type != GRUB_NET_NETWORK_LEVEL_PROTOCOL_IPV4
+      && addr.type != GRUB_NET_NETWORK_LEVEL_PROTOCOL_IPV6)
+    {
+      grub_error (GRUB_ERR_BUG, "not an IP address");
+      return NULL;
+    }
+
   socket->local_port = local_port++;
   socket->remote_port = remote_port;
   socket->ll_target_addr = ll_target_addr;
@@ -605,7 +612,7 @@ grub_net_tcp_open (char *server,
 
   reset_window (socket);
 
-  err = add_window_scale (nb, tcph, &hdrsize, socket->snd.sca);
+  err = add_window_scale (nb, tcph, &hdrsize, socket->rcv.sca);
   if (err)
     {
       grub_printf ("add_window_scale(): %m: %1m\n");
@@ -629,7 +636,7 @@ grub_net_tcp_open (char *server,
   tcph->seqnr = grub_cpu_to_be32 (socket->iss);
   tcph->ack = grub_cpu_to_be32_compile_time (0);
   tcph->flags = tcpsize (hdrsize) | TCP_SYN;
-  tcph->window = grub_cpu_to_be16 (socket->snd.wnd);
+  tcph->window = grub_cpu_to_be16 (socket->rcv.wnd);
   tcph->urgent = 0;
   tcph->src = grub_cpu_to_be16 (socket->local_port);
   tcph->dst = grub_cpu_to_be16 (socket->remote_port);

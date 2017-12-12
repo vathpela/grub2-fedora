@@ -236,10 +236,13 @@ show_progress (grub_file_t file, http_data_t data)
   int y = -1;
   grub_ssize_t size = have_ahead (file);
 
-  if (!grub_debug_enabled ("http"))
-    return;
+  if (file->size != GRUB_FILE_SIZE_UNKNOWN)
+      grub_net_tcp_socket_advise (data->sock, file->size);
 
   if (!size)
+    return;
+
+  if (!grub_debug_enabled ("http"))
     return;
 
   time_ms = grub_get_time_ms ();

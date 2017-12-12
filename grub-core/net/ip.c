@@ -27,6 +27,7 @@
 #include <grub/priority_queue.h>
 #include <grub/time.h>
 #include <grub/backtrace.h>
+#include <grub/lib/hexdump.h>
 
 struct iphdr {
   grub_uint8_t verhdrlen;
@@ -699,7 +700,7 @@ grub_net_send_ip_packet (const struct grub_net_network_level_interface *inf,
       break;
     default:
       err = grub_error (GRUB_ERR_BUG, "not an IP");
-      grub_printf("%s:%d: grub_net_send_ip_packet(): %m: %1m\n", GRUB_FILE, __LINE__);
+      grub_printf("%s:%d: grub_net_send_ip_packet(): %m: %1m: target type 0x%x\n", GRUB_FILE, __LINE__, target->type);
       grub_backtrace(0);
     }
   return err;
