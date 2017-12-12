@@ -640,7 +640,6 @@ grub_net_tcp_close (grub_net_tcp_socket_t sock,
   if (sock->state != CLOSED)
     dbg ("%d closing from state %s\n", sock->local_port,
 	 tcp_state_names[sock->state]);
-  grub_backtrace(1);
 
   if (sock->state != state)
     change_socket_state (sock, state);

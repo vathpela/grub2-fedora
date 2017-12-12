@@ -142,6 +142,8 @@ recv_pending (struct grub_net_card *dev)
    * because that'll mean we miss packets.
    *
    * So we have to actually be prepared to receive our packet here.
+   * Fortunately the devices I've seen do all seem to give you EFI_NOT_READY
+   * (or a garbled, useless packet) instead of blocking.
    */
   if (dev->rcvbuf_in_use)
     return 1;

@@ -1913,7 +1913,7 @@ grub_net_search_configfile (char *config)
   char *suffix;
 
   //grub_env_set ("debug", "net,http,tcp,tcp-segment,linuxefi");
-  grub_env_set ("debug", "net,tcp,http,linuxefi,secureboot");
+  //grub_env_set ("debug", "net,tcp,http,linuxefi,secureboot");
   //grub_env_set ("debug", "http");
 
   auto int search_through (grub_size_t num_tries, grub_size_t slice_size);
