@@ -128,18 +128,17 @@ linux_entry ()
   fi
 
   if [ "x${GRUB_ENABLE_BLSCFG}" = "xtrue" ]; then
-    if [ x$dirname = x/ ]; then
-      if [ -z "${prepare_root_cache}" ]; then
-        prepare_grub_to_access_device ${GRUB_DEVICE}
-      fi
-    else
-      if [ -z "${prepare_boot_cache}" ]; then
-        prepare_grub_to_access_device ${GRUB_DEVICE_BOOT}
-      fi
-    fi
+    add_device_modules "${GRUB_DEVICE_BOOT}"
+    uuid="$(get_device_uuid "${GRUB_DEVICE_BOOT}")"
+    ${grub_editenv} - set rootuuid="${uuid}"
 
-    bootefi_device="`${grub_probe} --target=device /boot/efi/`"
-    prepare_grub_to_access_device ${bootefi_device} boot
+    if [ -d /sys/firmware/efi/efivars ]; then
+      bootefi_device="`${grub_probe} --target=device /boot/efi/`"
+      add_device_modules ${bootefi_device}
+
+      uuid="$(get_device_uuid "${bootefi_device}")"
+    fi
+    ${grub_editenv} - set bootuuid="${uuid}"
 
     cat << EOF
 insmod blscfg

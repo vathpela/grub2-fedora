@@ -1348,6 +1348,13 @@ script = {
   installdir = sbin;
 };
 
+script = {
+  name = grub-set-uuids;
+  common = util/grub-set-uuids.in;
+  mansection = 8;
+  installdir = sbin;
+};
+
 program = {
   name = grub-glue-efi;
   mansection = 1;
