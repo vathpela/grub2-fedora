@@ -1843,6 +1843,7 @@ module = {
   common = script/argv.c;
 
   common = commands/menuentry.c;
+  common = commands/increment.c;
 
   common = unidata.c;
   common_nodist = grub_script.tab.c;
