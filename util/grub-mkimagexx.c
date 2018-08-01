@@ -700,6 +700,8 @@ arm_get_trampoline_size (Elf_Ehdr *e,
 	      {
 	      case R_ARM_ABS32:
 	      case R_ARM_V4BX:
+	      case R_ARM_MOVW_ABS_NC:
+	      case R_ARM_MOVT_ABS:
 		break;
 	      case R_ARM_THM_CALL:
 	      case R_ARM_THM_JUMP24:
@@ -1103,6 +1105,31 @@ SUFFIX (relocate_addrs) (Elf_Ehdr *e, struct section_metadata *smd,
 		       *target = grub_host_to_target32 (grub_target_to_host32 (*target) + sym_addr);
 		     }
 		     break;
+		   case R_ARM_MOVW_ABS_NC:
+		   case R_ARM_MOVT_ABS:
+		     {
+		       grub_uint32_t insn;
+		       grub_uint32_t offset;
+		       const grub_uint32_t insmask = 0xfff0f000;
+
+		       grub_util_info ("  %s:\toffset=%d\t(0x%08x)",
+				       ELF_R_TYPE(info) == R_ARM_MOVW_ABS_NC ? "MOVW_ABS_NC" : "MOVT_ABS",
+				       (int) sym_addr, (int) sym_addr);
+		       /* Data will be naturally aligned */
+		       if (image_target->id == IMAGE_EFI)
+			 sym_addr += 0x400;
+
+		       insn = offset = grub_target_to_host32 (*target);
+		       insn = insn & insmask;
+		       offset += sym_addr;
+
+		       if (ELF_R_TYPE (info) == R_ARM_MOVT_ABS)
+			 offset >>= 16;
+
+		       insn |= ((offset & 0xf000) << 4) | (offset & 0x0fff);
+		       *target = grub_host_to_target32 (insn);
+		     }
+		     break;
 		     /* Happens when compiled with -march=armv4.
 			Since currently we need at least armv5, keep bx as-is.
 		     */
@@ -1495,6 +1522,8 @@ classify_raw_reloc (Elf_Addr info,
 	case R_ARM_CALL:
 	  return RAW_RELOC_NONE;
 	case R_ARM_ABS32:
+	case R_ARM_MOVW_ABS_NC:
+	case R_ARM_MOVT_ABS:
 	  return RAW_RELOC_32;
 	default:
 	  grub_util_error (_("relocation 0x%x is not implemented yet"),

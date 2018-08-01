@@ -243,3 +243,30 @@ grub_arm_jump24_set_offset (grub_uint32_t *target,
 
   *target = grub_cpu_to_le32 (insword);
 }
+
+grub_uint32_t
+grub_arm_movw_movt_get_value (grub_uint32_t *target)
+{
+  grub_uint32_t insword;
+  grub_uint32_t offset;
+
+  insword = grub_le_to_cpu32 (*target);
+
+  offset = ((insword & 0xf0000) >> 4) | (insword & 0xfff);
+  offset = (offset & 0x8000) - 0x8000;
+  return offset;
+}
+
+void
+grub_arm_movw_movt_set_value (grub_uint32_t *target, grub_uint32_t value)
+{
+  grub_uint32_t insword;
+  const grub_uint32_t insmask = 0xfff0f000;
+
+  insword = grub_le_to_cpu32 (*target);
+  insword &= insmask;
+
+  insword |= ((value & 0xf000) << 4) | (value & 0x0fff);
+
+  *target = grub_cpu_to_le32 (insword);
+}

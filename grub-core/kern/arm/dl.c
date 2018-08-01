@@ -164,6 +164,26 @@ grub_arch_dl_relocate_symbols (grub_dl_t mod, void *ehdr,
 	    grub_arm_jump24_set_offset (target, offset);
 	  }
 	  break;
+	/* Happens when compiled with -march=armv4.  Since currently we need
+	 * at least armv5, keep bx as-is.
+	 */
+	case R_ARM_V4BX:
+	  break;
+	/* armv7 with -mfloat-abi=soft produces these */
+	case R_ARM_MOVW_ABS_NC:
+	case R_ARM_MOVT_ABS:
+	  {
+	    grub_uint32_t offset;
+	    offset = grub_arm_movw_movt_get_value((grub_uint32_t *) target);
+	    offset += sym_addr;
+
+	    if (ELF_R_TYPE (rel->r_info) == R_ARM_MOVT_ABS)
+	      offset >>= 16;
+
+	    grub_arm_movw_movt_set_value((grub_uint32_t *) target, offset);
+	  }
+	  break;
+
 	case R_ARM_THM_CALL:
 	case R_ARM_THM_JUMP24:
 	  {
@@ -201,11 +221,6 @@ grub_arch_dl_relocate_symbols (grub_dl_t mod, void *ehdr,
 	    if (retval != GRUB_ERR_NONE)
 	      return retval;
 	  }
-	  break;
-	  /* Happens when compiled with -march=armv4.  Since currently we need
-	     at least armv5, keep bx as-is.
-	   */
-	case R_ARM_V4BX:
 	  break;
 	case R_ARM_THM_MOVW_ABS_NC:
 	case R_ARM_THM_MOVT_ABS:

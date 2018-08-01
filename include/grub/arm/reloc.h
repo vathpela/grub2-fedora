@@ -43,6 +43,11 @@ void
 grub_arm_jump24_set_offset (grub_uint32_t *target,
 			    grub_int32_t offset);
 
+grub_uint32_t
+grub_arm_movw_movt_get_value (grub_uint32_t *target);
+void
+grub_arm_movw_movt_set_value (grub_uint32_t *target, grub_uint32_t value);
+
 grub_uint16_t
 grub_arm_thm_movw_movt_get_value (grub_uint16_t *target);
 void

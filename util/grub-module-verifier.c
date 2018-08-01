@@ -99,6 +99,8 @@ struct grub_module_verifier_arch archs[] = {
       R_ARM_THM_CALL,
       R_ARM_THM_JUMP24,
       R_ARM_V4BX,
+      R_ARM_MOVW_ABS_NC,
+      R_ARM_MOVT_ABS,
       R_ARM_THM_MOVW_ABS_NC,
       R_ARM_THM_MOVT_ABS,
       R_ARM_THM_JUMP19,
