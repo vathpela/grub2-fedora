@@ -1220,20 +1220,24 @@ grub_f2fs_close (grub_file_t file)
 }
 
 static grub_uint8_t *
-grub_f2fs_utf16_to_utf8 (grub_uint16_t *in_buf_le)
+grub_f2fs_utf16_to_utf8 (const void *ptr)
 {
+  const grub_unaligned_uint16_t *in_buf_le = (const grub_unaligned_uint16_t *)ptr;
   grub_uint16_t in_buf[MAX_VOLUME_NAME];
   grub_uint8_t *out_buf;
-  int len = 0;
+  int len;
 
   out_buf = grub_malloc (MAX_VOLUME_NAME * GRUB_MAX_UTF8_PER_UTF16 + 1);
   if (!out_buf)
     return NULL;
 
-  while (*in_buf_le != 0 && len < MAX_VOLUME_NAME) {
-    in_buf[len] = grub_le_to_cpu16 (in_buf_le[len]);
-    len++;
-  }
+  for (len = 0; len < MAX_VOLUME_NAME; len++, in_buf_le++)
+    {
+      grub_uint16_t tmp16 = grub_get_unaligned16 (in_buf_le);
+      in_buf[len] = grub_le_to_cpu16 (tmp16);
+      if (tmp16 == 0)
+	break;
+    }
 
   *grub_utf16_to_utf8 (out_buf, in_buf, len) = '\0';
 

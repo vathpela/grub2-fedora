@@ -499,10 +499,16 @@ grub_jfs_closedir (struct grub_jfs_diropen *diro)
 }
 
 static void
-le_to_cpu16_copy (grub_uint16_t *out, grub_uint16_t *in, grub_size_t len)
+le_to_cpu16_copy (void *outp, const void *inp, grub_size_t len)
 {
+  const grub_unaligned_uint16_t *in = (const grub_unaligned_uint16_t *)inp;
+  grub_unaligned_uint16_t *out = (grub_unaligned_uint16_t *)outp;
+  grub_uint16_t tmp16;
   while (len--)
-    *out++ = grub_le_to_cpu16 (*in++);
+    {
+      tmp16 = grub_get_unaligned16 (in++);
+      grub_set_unaligned16 (out++, grub_le_to_cpu16 (tmp16));
+    }
 }
 
 #if __GNUC__ >= 9

@@ -122,11 +122,11 @@ grub_utf8_process (grub_uint8_t c, grub_uint32_t *code, int *count)
    If SRCEND is not NULL, then *SRCEND is set to the next byte after the
    last byte used in SRC.  */
 static inline grub_size_t
-grub_utf8_to_utf16 (grub_uint16_t *dest, grub_size_t destsize,
+grub_utf8_to_utf16 (void *destp, grub_size_t destsize,
 		    const grub_uint8_t *src, grub_size_t srcsize,
 		    const grub_uint8_t **srcend)
 {
-  grub_uint16_t *p = dest;
+  grub_unaligned_uint16_t *p = (grub_unaligned_uint16_t *)destp;
   int count = 0;
   grub_uint32_t code = 0;
 
@@ -154,20 +154,20 @@ grub_utf8_to_utf16 (grub_uint16_t *dest, grub_size_t destsize,
 	break;
       if (code >= GRUB_UCS2_LIMIT)
 	{
-	  *p++ = GRUB_UTF16_UPPER_SURROGATE (code);
-	  *p++ = GRUB_UTF16_LOWER_SURROGATE (code);
+	  grub_set_unaligned16(p++, GRUB_UTF16_UPPER_SURROGATE (code));
+	  grub_set_unaligned16(p++, GRUB_UTF16_LOWER_SURROGATE (code));
 	  destsize -= 2;
 	}
       else
 	{
-	  *p++ = code;
+	  grub_set_unaligned16(p++, code);
 	  destsize--;
 	}
     }
 
   if (srcend)
     *srcend = src;
-  return p - dest;
+  return p - (grub_unaligned_uint16_t *)destp;
 }
 
 /* Determine the last position where the UTF-8 string [beg, end) can
@@ -198,14 +198,15 @@ grub_getend (const char *beg, const char *end)
 
 /* Convert UTF-16 to UTF-8.  */
 static inline grub_uint8_t *
-grub_utf16_to_utf8 (grub_uint8_t *dest, const grub_uint16_t *src,
+grub_utf16_to_utf8 (grub_uint8_t *dest, const void *srcp,
 		    grub_size_t size)
 {
   grub_uint32_t code_high = 0;
+  const grub_unaligned_uint16_t *src = (const grub_unaligned_uint16_t *)srcp;
 
   while (size--)
     {
-      grub_uint32_t code = *src++;
+      grub_uint32_t code = grub_get_unaligned16(src++);
 
       if (code_high)
 	{
