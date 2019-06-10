@@ -38,11 +38,15 @@ struct head
 } GRUB_PACKED;
 
 static inline unsigned long long
-read_number (const grub_uint16_t *arr, grub_size_t size)
+read_number (const void *arrp, grub_size_t size)
 {
+  const grub_unaligned_uint16_t *arr = (const grub_unaligned_uint16_t *)arrp;
   long long ret = 0;
   while (size--)
-    ret = (ret << 16) | grub_be_to_cpu16 (*arr++);
+    {
+      grub_uint16_t tmp16 = grub_get_unaligned16 (arr++);
+      ret = (ret << 16) | grub_be_to_cpu16 (tmp16);
+    }
   return ret;
 }
 

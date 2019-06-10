@@ -26,6 +26,9 @@
 #include <grub/dl.h>
 
 #pragma GCC diagnostic ignored "-Wcast-align"
+#if defined(__GNUC__) && __GNUC__ > 8
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+#endif
 
 GRUB_MOD_LICENSE ("GPLv3+");
 

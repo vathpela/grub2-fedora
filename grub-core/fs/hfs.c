@@ -694,10 +694,14 @@ grub_hfs_iterate_records (struct grub_hfs_data *data, int type, int idx,
       struct grub_hfs_extent *dat;
       int blk;
       grub_uint16_t reccnt;
+      grub_hfs_datarecord_t dr;
 
-      dat = (struct grub_hfs_extent *) (type == 0
-					? (&data->sblock.catalog_recs)
-					: (&data->sblock.extent_recs));
+      grub_memcpy(&dr, (type == 0
+			? (&data->sblock.catalog_recs)
+			: (&data->sblock.extent_recs)),
+		  sizeof(dr));
+
+      dat = (struct grub_hfs_extent *)dr;
 
       /* Read the node into memory.  */
       blk = grub_hfs_block (data, dat,
