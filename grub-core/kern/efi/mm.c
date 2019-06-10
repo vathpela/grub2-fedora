@@ -170,7 +170,7 @@ grub_efi_allocate_pages_real (grub_efi_physical_address_t address,
   if (status != GRUB_EFI_SUCCESS)
     {
       grub_dprintf ("efi",
-		    "allocate_pages(%d, %d, 0x%0lx, 0x%016lx) = 0x%016lx\n",
+		    "allocate_pages(%u, %u, 0x%0"PRIxGRUB_EFI_UINTN", 0x%"PRIxGRUB_EFI_PADDR") = %ur\n",
 		    alloctype, memtype, pages, address, status);
       grub_error (GRUB_ERR_OUT_OF_MEMORY, N_("out of memory"));
       return NULL;
@@ -705,19 +705,19 @@ grub_efi_get_ram_base(grub_addr_t *base_addr)
        desc = NEXT_MEMORY_DESCRIPTOR (desc, desc_size))
     {
       if (desc->type == GRUB_EFI_CONVENTIONAL_MEMORY &&
-          (desc->attribute & GRUB_EFI_MEMORY_WB))
-        {
-          *base_addr = grub_min (*base_addr, desc->physical_start);
-          grub_dprintf ("efi", "setting base_addr=0x%016lx\n", *base_addr);
-        }
+	  (desc->attribute & GRUB_EFI_MEMORY_WB))
+	{
+	  *base_addr = grub_min (*base_addr, desc->physical_start);
+	  grub_dprintf ("efi", "setting base_addr=0x%016"PRIxGRUB_INTPTR"\n", *base_addr);
+	}
       else
-        {
-          grub_dprintf ("efi", "ignoring address 0x%016lx\n", desc->physical_start);
-        }
+	{
+	  grub_dprintf ("efi", "ignoring address 0x%016"PRIxGRUB_EFI_PADDR"\n", desc->physical_start);
+	}
     }
 
   if (*base_addr == GRUB_EFI_MAX_USABLE_ADDRESS)
-    grub_dprintf ("efi", "base_addr 0x%016lx is probably wrong.\n", *base_addr);
+    grub_dprintf ("efi", "base_addr 0x0%016"PRIxGRUB_UINTPTR" is probably wrong.\n", *base_addr);
 
   grub_free(memory_map);
 

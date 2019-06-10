@@ -160,7 +160,7 @@ grub_acpi_create_ebda (void)
   struct grub_acpi_create_ebda_ctx ctx = {
     .highestlow = 0
   };
-  int ebda_kb_len = 0;
+  unsigned int ebda_kb_len = 0;
   int mmapregion = 0;
   grub_uint8_t *ebda, *v1inebda = 0, *v2inebda = 0;
   grub_uint8_t *targetebda, *target;

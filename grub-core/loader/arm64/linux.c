@@ -242,9 +242,9 @@ grub_linux_unload (void)
  * RAM, place the buffer in the first 32GB of RAM.
  */
 #ifdef __arm__
-#define INITRD_MAX_ADDRESS_OFFSET (512U * 1024 * 1024)
+#define INITRD_MAX_ADDRESS_OFFSET ((grub_size_t)(512U * 1024 * 1024))
 #else /* __aarch64__ */
-#define INITRD_MAX_ADDRESS_OFFSET (32ULL * 1024 * 1024 * 1024)
+#define INITRD_MAX_ADDRESS_OFFSET ((grub_size_t)(32ULL * 1024 * 1024 * 1024))
 #endif
 
 /*
@@ -252,7 +252,7 @@ grub_linux_unload (void)
  * or NULL if unsuccessful
  */
 static void *
-allocate_initrd_mem (int initrd_pages)
+allocate_initrd_mem (grub_size_t initrd_pages)
 {
   grub_addr_t max_addr = 0;
   grub_err_t err;
@@ -265,16 +265,19 @@ allocate_initrd_mem (int initrd_pages)
       return NULL;
     }
 
-  grub_dprintf ("linux", "max_addr: 0x%016lx, INITRD_MAX_ADDRESS_OFFSET: 0x%016llx\n",
+  grub_dprintf ("linux",
+		"max_addr: 0x%0"PRIxGRUB_ADDR", INITRD_MAX_ADDRESS_OFFSET: 0x%0"PRIxGRUB_SIZE"\n",
 		max_addr, INITRD_MAX_ADDRESS_OFFSET);
 
   max_addr += INITRD_MAX_ADDRESS_OFFSET - 1;
-  grub_dprintf ("linux", "calling grub_efi_allocate_pages_real (0x%016lx, 0x%08x, EFI_ALLOCATE_MAX_ADDRESS, EFI_LOADER_DATA)", max_addr, initrd_pages);
+  grub_dprintf ("linux",
+		"calling grub_efi_allocate_pages_real (0x%0"PRIxGRUB_ADDR", 0x%08x, EFI_ALLOCATE_MAX_ADDRESS, EFI_LOADER_DATA)",
+		max_addr, initrd_pages);
 
   ret = grub_efi_allocate_pages_real (max_addr, initrd_pages,
 				      GRUB_EFI_ALLOCATE_MAX_ADDRESS,
 				      GRUB_EFI_LOADER_DATA);
-  grub_dprintf ("linux", "got 0x%016llx\n", (unsigned long long)ret);
+  grub_dprintf ("linux", "got 0x%0"PRIxGRUB_UINTPTR"\n", (grub_uintptr_t)ret);
   return ret;
 }
 
@@ -283,7 +286,7 @@ grub_cmd_initrd (grub_command_t cmd __attribute__ ((unused)),
 		 int argc, char *argv[])
 {
   struct grub_linux_initrd_context initrd_ctx = { 0, 0, 0 };
-  int initrd_size, initrd_pages;
+  grub_size_t initrd_size, initrd_pages;
   void *initrd_mem = NULL;
 
   if (argc == 0)

@@ -621,7 +621,7 @@ handle_image (void *data, grub_efi_uint32_t datasize)
 
       grub_strncpy(name, section->name, 9);
       name[8] = '\0';
-      grub_dprintf ("chain", "Section %d \"%s\" at %p..%p\n", i,
+      grub_dprintf ("chain", "Section %"PRIuGRUB_UINT32_T" \"%s\" at %p..%p\n", i,
 		   name, base, end);
 
       if (end < base)
@@ -805,7 +805,7 @@ handle_image (void *data, grub_efi_uint32_t datasize)
   return 1;
 
 error_exit:
-  grub_dprintf ("chain", "error_exit: grub_errno: %d\n", grub_errno);
+  grub_dprintf ("chain", "error_exit: grub_errno: %u\n", grub_errno);
   if (buffer)
     grub_efi_free_pool (buffer);
 

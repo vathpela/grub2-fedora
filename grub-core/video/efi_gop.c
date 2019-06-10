@@ -393,7 +393,7 @@ grub_video_gop_setup (unsigned int width, unsigned int height,
 		  || (width == 0 && height == 0))
 	  && (depth == bpp || depth == 0))
 	{
-	  grub_dprintf ("video", "GOP: keeping mode %d\n", gop->mode->mode);
+	  grub_dprintf ("video", "GOP: keeping mode %"PRIuGRUB_EFI_UINT32"\n", gop->mode->mode);
 	  best_mode = gop->mode->mode;
 	  found = 1;
 	}
@@ -402,7 +402,7 @@ grub_video_gop_setup (unsigned int width, unsigned int height,
   if (!found)
     {
       unsigned mode;
-      grub_dprintf ("video", "GOP: %d modes detected\n", gop->mode->max_mode);
+      grub_dprintf ("video", "GOP: %u modes detected\n", gop->mode->max_mode);
       for (mode = 0; mode < gop->mode->max_mode; mode++)
 	{
 	  grub_efi_uintn_t size;
@@ -415,31 +415,31 @@ grub_video_gop_setup (unsigned int width, unsigned int height,
 	      continue;
 	    }
 
-	  grub_dprintf ("video", "GOP: mode %d: %dx%d\n", mode, info->width,
+	  grub_dprintf ("video", "GOP: mode %u: %"PRIuGRUB_EFI_UINT32"x%"PRIuGRUB_EFI_UINT32"\n", mode, info->width,
 			info->height);
 
 	  if (preferred_width && (info->width > preferred_width
 				  || info->height > preferred_height))
 	    {
-	      grub_dprintf ("video", "GOP: mode %d: too large\n", mode);
+	      grub_dprintf ("video", "GOP: mode %u: too large\n", mode);
 	      continue;
 	    }
 
 	  bpp = grub_video_gop_get_bpp (info);
 	  if (!bpp)
 	    {
-	      grub_dprintf ("video", "GOP: mode %d: incompatible pixel mode\n",
+	      grub_dprintf ("video", "GOP: mode %u: incompatible pixel mode\n",
 			    mode);
 	      continue;
 	    }
 
-	  grub_dprintf ("video", "GOP: mode %d: depth %d\n", mode, bpp);
+	  grub_dprintf ("video", "GOP: mode %u: depth %u\n", mode, bpp);
 
 	  if (!(((info->width == width && info->height == height)
 		|| (width == 0 && height == 0))
 		&& (bpp == depth || depth == 0)))
 	    {
-	      grub_dprintf ("video", "GOP: mode %d: rejected\n", mode);
+	      grub_dprintf ("video", "GOP: mode %u: rejected\n", mode);
 	      continue;
 	    }
 
@@ -499,7 +499,7 @@ grub_video_gop_setup (unsigned int width, unsigned int height,
       buffer = framebuffer.ptr;
     }
     
-  grub_dprintf ("video", "GOP: initialising FB @ %p %dx%dx%d\n",
+  grub_dprintf ("video", "GOP: initialising FB @ %p %ux%ux%u\n",
 		framebuffer.ptr, framebuffer.mode_info.width,
 		framebuffer.mode_info.height, framebuffer.mode_info.bpp);
  

@@ -60,10 +60,11 @@ grub_efi_mmap_iterate (grub_memory_hook_t hook, void *hook_data,
        desc < NEXT_MEMORY_DESCRIPTOR (map_buf, mmap_size);
        desc = NEXT_MEMORY_DESCRIPTOR (desc, desc_size))
     {
-      grub_dprintf ("mmap", "EFI memory region 0x%llx-0x%llx: %d\n",
-		    (unsigned long long) desc->physical_start,
-		    (unsigned long long) desc->physical_start
-		    + desc->num_pages * 4096, desc->type);
+      grub_dprintf ("mmap",
+		    "EFI memory region 0x%"PRIxGRUB_EFI_PADDR"-0x%"PRIxGRUB_EFI_PADDR": %"PRIuGRUB_EFI_UINT32"\n",
+		    desc->physical_start,
+		    desc->physical_start + desc->num_pages * 4096,
+		    desc->type);
       switch (desc->type)
 	{
 	case GRUB_EFI_BOOT_SERVICES_CODE:
@@ -124,7 +125,7 @@ grub_efi_mmap_iterate (grub_memory_hook_t hook, void *hook_data,
 	break;
 
 	default:
-	  grub_printf ("Unknown memory type %d, considering reserved\n",
+	  grub_printf ("Unknown memory type %"PRIxGRUB_EFI_UINT32", considering reserved\n",
 		       desc->type);
 	  hook (desc->physical_start, desc->num_pages * 4096,
 		GRUB_MEMORY_RESERVED, hook_data);

@@ -108,7 +108,7 @@ disp_sal (void *table)
 	    struct grub_efi_sal_system_table_purge_translation_coherence *c
 	      = desc;
 	    l = sizeof (*c);
-	    grub_printf (" PTC coherence nbr=%d addr=%016" PRIxGRUB_UINT64_T "\n",
+	    grub_printf (" PTC coherence nbr=%"PRIuGRUB_UINT32_T" addr=%016" PRIxGRUB_UINT64_T "\n",
 			 c->ndomains, c->coherence);
 	  }
 	  break;
