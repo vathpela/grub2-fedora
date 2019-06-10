@@ -220,7 +220,7 @@ static void
 circprog_set_state (void *vself, int visible, int start,
 		    int current, int end)
 {
-  circular_progress_t self = vself;  
+  circular_progress_t self = vself;
   self->visible = visible;
   self->start = start;
   self->value = current;
@@ -230,7 +230,7 @@ circprog_set_state (void *vself, int visible, int start,
 static int
 parse_angle (const char *value)
 {
-  char *ptr;
+  const char *ptr;
   int angle;
 
   angle = grub_strtol (value, &ptr, 10);

@@ -180,9 +180,8 @@ do_setkey (RIJNDAEL_context *ctx, const byte *key, const unsigned keylen)
 {
   static int initialized = 0;
   static const char *selftest_failed=0;
-  int rounds;
-  int i,j, r, t, rconpointer = 0;
-  int KC;
+  int KC, rounds, j, r, t, rconpointer = 0;
+  unsigned int i;
   union
   {
     PROPERLY_ALIGNED_TYPE dummy;
