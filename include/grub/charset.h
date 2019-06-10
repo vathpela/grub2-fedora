@@ -20,6 +20,7 @@
 #define GRUB_CHARSET_HEADER	1
 
 #include <grub/types.h>
+#include <grub/misc.h>
 
 #define GRUB_UINT8_1_LEADINGBIT 0x80
 #define GRUB_UINT8_2_LEADINGBITS 0xc0
