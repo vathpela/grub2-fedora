@@ -42,6 +42,9 @@
  * here (not udiv_qrnnd).
  */
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
+
 mpi_limb_t
 _gcry_mpih_mod_1(mpi_ptr_t dividend_ptr, mpi_size_t dividend_size,
 				      mpi_limb_t divisor_limb)
@@ -185,6 +188,8 @@ _gcry_mpih_mod_1(mpi_ptr_t dividend_ptr, mpi_size_t dividend_size,
 	return r;
     }
 }
+
+#pragma GCC diagnostic pop
 
 /* Divide num (NP/NSIZE) by den (DP/DSIZE) and write
  * the NSIZE-DSIZE least significant quotient limbs at QP
@@ -381,6 +386,8 @@ _gcry_mpih_divrem( mpi_ptr_t qp, mpi_size_t qextra_limbs,
     return most_significant_q_limb;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-but-set-variable"
 
 /****************
  * Divide (DIVIDEND_PTR,,DIVIDEND_SIZE) by DIVISOR_LIMB.
@@ -532,3 +539,4 @@ _gcry_mpih_divmod_1( mpi_ptr_t quot_ptr,
 	return r;
     }
 }
+#pragma GCC diagnostic pop
