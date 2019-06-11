@@ -855,7 +855,7 @@ grub_f2fs_get_block (grub_fshelp_node_t node, grub_disk_addr_t block_ofs)
 {
   struct grub_f2fs_data *data = node->data;
   struct grub_f2fs_inode *inode = &node->inode.i;
-  grub_uint32_t offset[4], noffset[4], nids[4];
+  grub_uint32_t offset[4] = { 0, }, noffset[4], nids[4];
   struct grub_f2fs_node *node_block;
   grub_uint32_t block_addr = -1;
   int level, i;
