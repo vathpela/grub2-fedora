@@ -31,6 +31,11 @@
  *   http://www.oberhumer.com/opensource/lzo/
  */
 
+#if defined(__GNUC__) && __GNUC__ >= 8
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+#pragma GCC optimize "-fno-strict-aliasing"
+#endif
+
 #define __LZO_IN_MINILZO 1
 
 #if defined(LZO_CFG_FREESTANDING)
