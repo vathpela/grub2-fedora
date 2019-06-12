@@ -42,7 +42,7 @@ struct grub_module_header
 };
 
 /* "gmim" (GRUB Module Info Magic).  */
-#define GRUB_MODULE_MAGIC 0x676d696d
+#define GRUB_MODULE_MAGIC 0x676d696du
 
 struct grub_module_info32
 {

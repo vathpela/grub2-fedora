@@ -393,14 +393,14 @@ relocate_coff (pe_coff_loader_image_context_t *context,
       return GRUB_EFI_UNSUPPORTED;
     }
 
-  adjust = (grub_uint64_t)(grub_efi_uintn_t)data - context->image_address;
+  adjust = (grub_efi_uint64_t)(((grub_uintptr_t)data) - context->image_address);
   if (adjust == 0)
     return GRUB_EFI_SUCCESS;
 
   while (reloc_base < reloc_base_end)
     {
       grub_uint16_t *entry;
-      reloc = (struct grub_pe32_fixup_block *)((char*)reloc_base);
+      reloc = (struct grub_pe32_fixup_block *)reloc_base;
 
       if ((reloc_base->size == 0) ||
 	  (reloc_base->size > context->reloc_dir->size))
@@ -413,7 +413,7 @@ relocate_coff (pe_coff_loader_image_context_t *context,
 
       entry = &reloc->entries[0];
       reloc_end = (struct grub_pe32_fixup_block *)
-	((char *)reloc_base + reloc_base->size);
+	((grub_uintptr_t)reloc_base + reloc_base->size);
 
       if ((void *)reloc_end < orig || (void *)reloc_end > image_end)
         {
@@ -438,41 +438,41 @@ relocate_coff (pe_coff_loader_image_context_t *context,
               case GRUB_PE32_REL_BASED_ABSOLUTE:
                 break;
               case GRUB_PE32_REL_BASED_HIGH:
-                fixup_16 = (grub_uint16_t *)fixup;
+                fixup_16 = (grub_uint16_t *)(grub_uintptr_t)fixup;
                 *fixup_16 = (grub_uint16_t)
 		  (*fixup_16 + ((grub_uint16_t)((grub_uint32_t)adjust >> 16)));
                 if (fixup_data != NULL)
                   {
-                    *(grub_uint16_t *) fixup_data = *fixup_16;
+                    *(grub_uint16_t *)(grub_uintptr_t)fixup_data = *fixup_16;
                     fixup_data = fixup_data + sizeof (grub_uint16_t);
                   }
                 break;
               case GRUB_PE32_REL_BASED_LOW:
-                fixup_16 = (grub_uint16_t *)fixup;
+                fixup_16 = (grub_uint16_t *)(grub_uintptr_t)fixup;
                 *fixup_16 = (grub_uint16_t) (*fixup_16 + (grub_uint16_t)adjust);
                 if (fixup_data != NULL)
                   {
-                    *(grub_uint16_t *) fixup_data = *fixup_16;
+                    *(grub_uint16_t *)(grub_uintptr_t)fixup_data = *fixup_16;
                     fixup_data = fixup_data + sizeof (grub_uint16_t);
                   }
                 break;
               case GRUB_PE32_REL_BASED_HIGHLOW:
-                fixup_32 = (grub_uint32_t *)fixup;
+                fixup_32 = (grub_uint32_t *)(grub_uintptr_t)fixup;
                 *fixup_32 = *fixup_32 + (grub_uint32_t)adjust;
                 if (fixup_data != NULL)
                   {
                     fixup_data = (char *)ALIGN_UP ((grub_addr_t)fixup_data, sizeof (grub_uint32_t));
-                    *(grub_uint32_t *) fixup_data = *fixup_32;
+                    *(grub_uint32_t *)(grub_uintptr_t)fixup_data = *fixup_32;
                     fixup_data += sizeof (grub_uint32_t);
                   }
                 break;
               case GRUB_PE32_REL_BASED_DIR64:
-                fixup_64 = (grub_uint64_t *)fixup;
+                fixup_64 = (grub_uint64_t *)(grub_uintptr_t)fixup;
                 *fixup_64 = *fixup_64 + (grub_uint64_t)adjust;
                 if (fixup_data != NULL)
                   {
                     fixup_data = (char *)ALIGN_UP ((grub_addr_t)fixup_data, sizeof (grub_uint64_t));
-                    *(grub_uint64_t *) fixup_data = *fixup_64;
+                    *(grub_uint64_t *)(grub_uintptr_t)fixup_data = *fixup_64;
                     fixup_data += sizeof (grub_uint64_t);
                   }
                 break;

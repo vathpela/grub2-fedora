@@ -53,6 +53,8 @@ send_ethernet_packet (struct grub_net_network_level_interface *inf,
   grub_uint32_t vlantag = 0;
   grub_uint8_t hw_addr_len = inf->card->default_address.len;
   grub_uint8_t etherhdr_size = 2 * hw_addr_len + 2;
+  grub_uint16_t tmp16;
+  grub_uint32_t tmp32;
 
   /* Source and destination link addresses + ethertype + vlan tag */
   COMPILE_TIME_ASSERT ((GRUB_NET_MAX_LINK_ADDRESS_SIZE * 2 + 2 + 4) <
@@ -74,12 +76,14 @@ send_ethernet_packet (struct grub_net_network_level_interface *inf,
   /* Check if a vlan-tag is present. */
   if (vlantag != 0)
     {
-      *((grub_uint32_t *)eth) = grub_cpu_to_be32 (vlantag);
+      tmp32 = grub_cpu_to_be32 (vlantag);
+      grub_memcpy(eth, &tmp32, sizeof(tmp32));
       eth += sizeof (vlantag);
     }
 
   /* Write ethertype */
-  *((grub_uint16_t*) eth) = grub_cpu_to_be16 (ethertype);
+  tmp16 = grub_cpu_to_be16 (ethertype);
+  grub_memcpy(eth, &tmp16, sizeof(tmp16));
 
   if (!inf->card->opened)
     {
@@ -108,6 +112,7 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
   grub_uint8_t hw_addr_len = card->default_address.len;
   grub_uint8_t etherhdr_size = 2 * hw_addr_len + 2;
   grub_uint16_t vlantag = 0;
+  grub_uint16_t tmp16;
 
   eth = nb->data;
 
@@ -121,15 +126,18 @@ grub_net_recv_ethernet_packet (struct grub_net_buff *nb,
   grub_memcpy (src_hwaddress.mac, eth, hw_addr_len);
   eth += hw_addr_len;
 
-  type = grub_be_to_cpu16 (*(grub_uint16_t*)(eth));
+  grub_memcpy(&tmp16, eth, sizeof(tmp16));
+  type = grub_be_to_cpu16 (tmp16);
   if (type == VLANTAG_IDENTIFIER)
     {
       /* Skip vlan tag */
       eth += 2;
-      vlantag = grub_be_to_cpu16 (*(grub_uint16_t*)(eth));
+      grub_memcpy(&tmp16, eth, sizeof(tmp16));
+      vlantag = grub_be_to_cpu16 (tmp16);
       etherhdr_size += 4;
       eth += 2;
-      type = grub_be_to_cpu16 (*(grub_uint16_t*)(eth));
+      grub_memcpy(&tmp16, eth, sizeof(tmp16));
+      type = grub_be_to_cpu16 (tmp16);
     }
 
   err = grub_netbuff_pull (nb, etherhdr_size);
