@@ -96,6 +96,9 @@ grub_efi_free_pool (void *buffer)
   return status;
 }
 
+const char * EXPORT_FUNC(grub_real_efi_status_to_str) (grub_efi_status_t status);
+#define grub_efi_status_to_str(x) ((const char * const)grub_real_efi_status_to_str(x))
+
 grub_efi_loaded_image_t *EXPORT_FUNC(grub_efi_get_loaded_image) (grub_efi_handle_t image_handle);
 void EXPORT_FUNC(grub_efi_print_device_path) (grub_efi_device_path_t *dp);
 char *EXPORT_FUNC(grub_efi_get_filename) (grub_efi_device_path_t *dp);
