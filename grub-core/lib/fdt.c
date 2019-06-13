@@ -101,7 +101,7 @@ static int get_mem_rsvmap_size (const void *fdt)
   do
   {
     size += 2 * sizeof(*ptr);
-    if (!ptr[0].val && !ptr[1].val)
+    if (!ptr[0] && !ptr[1])
       return size;
     ptr += 2;
   } while ((grub_addr_t) ptr <= (grub_addr_t) fdt + grub_fdt_get_totalsize (fdt)

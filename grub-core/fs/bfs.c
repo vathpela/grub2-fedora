@@ -546,7 +546,7 @@ iterate_in_b_tree (grub_disk_t disk,
 	    end = grub_bfs_to_cpu_treehead (node->total_key_len);
 	  c = key_data[end];
 	  key_data[end] = 0;
-	  if (hook (key_data + start, grub_bfs_to_cpu64 (key_values[i].val),
+	  if (hook (key_data + start, grub_bfs_to_cpu64 (key_values[i]),
 		    ctx))
 	    {
 	      grub_free (node);
@@ -639,7 +639,7 @@ find_in_b_tree (grub_disk_t disk,
 	  cmp = bfs_strcmp (key_data + start, name, end - start);
 	  if (cmp == 0 && level == 0)
 	    {
-	      *res = grub_bfs_to_cpu64 (key_values[i | (1 << j)].val);
+	      *res = grub_bfs_to_cpu64 (key_values[i | (1 << j)]);
 	      grub_free (node);
 	      return GRUB_ERR_NONE;
 	    }
@@ -660,7 +660,7 @@ find_in_b_tree (grub_disk_t disk,
 	  cmp = bfs_strcmp (key_data, name, end);
 	  if (cmp == 0 && level == 0)
 	    {
-	      *res = grub_bfs_to_cpu64 (key_values[0].val);
+	      *res = grub_bfs_to_cpu64 (key_values[0]);
 	      grub_free (node);
 	      return GRUB_ERR_NONE;
 	    }
@@ -670,7 +670,7 @@ find_in_b_tree (grub_disk_t disk,
 	    if (cmp >= 0 && level != 0)
 #endif
 	      {
-		node_off = grub_bfs_to_cpu64 (key_values[0].val);
+		node_off = grub_bfs_to_cpu64 (key_values[0]);
 		level--;
 		grub_free (node);
 		continue;
@@ -678,7 +678,7 @@ find_in_b_tree (grub_disk_t disk,
 	    else if (level != 0
 		     && grub_bfs_to_cpu_treehead (node->count_keys) >= 2)
 	      {
-		node_off = grub_bfs_to_cpu64 (key_values[1].val);
+		node_off = grub_bfs_to_cpu64 (key_values[1]);
 		level--;
 		grub_free (node);
 		continue;
@@ -687,7 +687,7 @@ find_in_b_tree (grub_disk_t disk,
 	else if (level != 0
 		 && i + 1 < grub_bfs_to_cpu_treehead (node->count_keys))
 	  {
-	    node_off = grub_bfs_to_cpu64 (key_values[i + 1].val);
+	    node_off = grub_bfs_to_cpu64 (key_values[i + 1]);
 	    level--;
 	    grub_free (node);
 	    continue;

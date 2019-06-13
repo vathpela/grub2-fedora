@@ -179,10 +179,6 @@ typedef grub_uint64_t	grub_off_t;
 typedef grub_uint64_t	grub_disk_addr_t;
 
 /* Byte-orders.  */
-static inline grub_uint16_t grub_swap_bytes16(grub_uint16_t _x)
-{
-   return (grub_uint16_t) ((_x << 8) | (_x >> 8));
-}
 
 #define grub_swap_bytes16_compile_time(x) ((((x) & 0xff) << 8) | (((x) & 0xff00) >> 8))
 #define grub_swap_bytes32_compile_time(x) ((((x) & 0xff) << 24) | (((x) & 0xff00) << 8) | (((x) & 0xff0000) >> 8) | (((x) & 0xff000000UL) >> 24))
@@ -200,16 +196,26 @@ static inline grub_uint16_t grub_swap_bytes16(grub_uint16_t _x)
 })
 
 #if (defined(__GNUC__) && (__GNUC__ > 3) && (__GNUC__ > 4 || __GNUC_MINOR__ >= 3)) || defined(__clang__)
+static inline grub_uint16_t grub_swap_bytes16(grub_uint16_t x)
+{
+  return __builtin_bswap16(x);
+}
+
 static inline grub_uint32_t grub_swap_bytes32(grub_uint32_t x)
 {
-	return __builtin_bswap32(x);
+  return __builtin_bswap32(x);
 }
 
 static inline grub_uint64_t grub_swap_bytes64(grub_uint64_t x)
 {
-	return __builtin_bswap64(x);
+  return __builtin_bswap64(x);
 }
 #else					/* not gcc 4.3 or newer */
+static inline grub_uint16_t grub_swap_bytes16(grub_uint16_t _x)
+{
+   return (grub_uint16_t) ((_x << 8) | (_x >> 8));
+}
+
 static inline grub_uint32_t grub_swap_bytes32(grub_uint32_t _x)
 {
    return ((_x << 24)
@@ -271,67 +277,49 @@ static inline grub_uint64_t grub_swap_bytes64(grub_uint64_t _x)
 # define grub_cpu_to_le16_compile_time(x)	((grub_uint16_t) (x))
 # define grub_cpu_to_le32_compile_time(x)	((grub_uint32_t) (x))
 # define grub_cpu_to_le64_compile_time(x)	((grub_uint64_t) (x))
-
 #endif /* ! WORDS_BIGENDIAN */
 
-struct grub_unaligned_uint16
-{
-  grub_uint16_t val;
-} GRUB_PACKED;
-struct grub_unaligned_uint32
-{
-  grub_uint32_t val;
-} GRUB_PACKED;
-struct grub_unaligned_uint64
-{
-  grub_uint64_t val;
-} GRUB_PACKED;
+typedef grub_uint16_t GRUB_ALIGNED(1) grub_unaligned_uint16_t;
+typedef grub_uint32_t GRUB_ALIGNED(1) grub_unaligned_uint32_t;
+typedef grub_uint64_t GRUB_ALIGNED(1) grub_unaligned_uint64_t;
 
-typedef struct grub_unaligned_uint16 grub_unaligned_uint16_t;
-typedef struct grub_unaligned_uint32 grub_unaligned_uint32_t;
-typedef struct grub_unaligned_uint64 grub_unaligned_uint64_t;
-
-static inline grub_uint16_t grub_get_unaligned16 (const void *ptr)
+static inline grub_uint16_t grub_get_unaligned16 (const void * const ptr)
 {
-  const struct grub_unaligned_uint16 *dd
-    = (const struct grub_unaligned_uint16 *) ptr;
-  return dd->val;
+  const grub_unaligned_uint16_t *dd = ptr;
+  return *dd;
 }
 
-static inline void grub_set_unaligned16 (void *ptr, grub_uint16_t val)
+static inline void grub_set_unaligned16 (void * const ptr,
+					 const grub_uint16_t val)
 {
-  struct grub_unaligned_uint16 *dd = (struct grub_unaligned_uint16 *) ptr;
-  dd->val = val;
+  grub_unaligned_uint16_t * const dd = ptr;
+  *dd = val;
 }
 
-static inline grub_uint32_t grub_get_unaligned32 (const void *ptr)
+static inline grub_uint32_t grub_get_unaligned32 (const void * const ptr)
 {
-  const struct grub_unaligned_uint32 *dd
-    = (const struct grub_unaligned_uint32 *) ptr;
-  return dd->val;
+  const grub_unaligned_uint32_t * const dd = ptr;
+  return *dd;
 }
 
-static inline void grub_set_unaligned32 (void *ptr, grub_uint32_t val)
+static inline void grub_set_unaligned32 (void * const ptr,
+					 const grub_uint32_t val)
 {
-  struct grub_unaligned_uint32 *dd = (struct grub_unaligned_uint32 *) ptr;
-  dd->val = val;
+  grub_unaligned_uint32_t * const dd = ptr;
+  *dd = val;
 }
 
-static inline grub_uint64_t grub_get_unaligned64 (const void *ptr)
+static inline grub_uint64_t grub_get_unaligned64 (const void * const ptr)
 {
-  const struct grub_unaligned_uint64 *dd
-    = (const struct grub_unaligned_uint64 *) ptr;
-  return dd->val;
+  const grub_unaligned_uint64_t * const dd = ptr;
+  return *dd;
 }
 
-static inline void grub_set_unaligned64 (void *ptr, grub_uint64_t val)
+static inline void grub_set_unaligned64 (void * const ptr,
+					 const grub_uint64_t val)
 {
-  struct grub_unaligned_uint64_t
-  {
-    grub_uint64_t d;
-  } GRUB_PACKED;
-  struct grub_unaligned_uint64_t *dd = (struct grub_unaligned_uint64_t *) ptr;
-  dd->d = val;
+  grub_unaligned_uint64_t * const dd = ptr;
+  *dd = val;
 }
 
 #define GRUB_CHAR_BIT 8
