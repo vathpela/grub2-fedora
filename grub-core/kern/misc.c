@@ -749,6 +749,7 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 	case 's':
 #if defined(GRUB_MACHINE_EFI)
 	  if ((c == 'u' && *fmt == 'r') ||
+	      (c == 'p' && *fmt == 'D') ||
 	      (c == 'p' && *fmt == 'G'))
 	    fmt++;
 #endif
@@ -849,7 +850,7 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 	  break;
 	case 'p':
 #if defined(GRUB_MACHINE_EFI)
-	  if (*fmt == 'G')
+	  if (*fmt == 'D' || *fmt == 'G')
 	    fmt++;
 #endif
 	  /* fall through. */
