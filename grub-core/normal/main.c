@@ -309,16 +309,12 @@ grub_normal_execute (const char *config, int nested, int batch)
 
   grub_boot_time ("Executed config file");
 
-  if (! batch)
+  if (!batch && !grub_debug_enabled("menu") && menu && menu->size)
     {
-      if (menu && menu->size)
-	{
-
-	  grub_boot_time ("Entering menu");
-	  grub_show_menu (menu, nested, 0);
-	  if (nested)
-	    grub_normal_free_menu (menu);
-	}
+      grub_boot_time ("Entering menu");
+      grub_show_menu (menu, nested, 0);
+      if (nested)
+	grub_normal_free_menu (menu);
     }
 }
 
@@ -549,7 +545,41 @@ grub_mini_cmd_clear (struct grub_command *cmd __attribute__ ((unused)),
   return 0;
 }
 
-static grub_command_t cmd_clear;
+static grub_err_t
+grub_cmd_choose (struct grub_command *cmd __attribute__ ((unused)),
+		 int argc, char *argv[])
+{
+  grub_menu_t menu;
+  grub_menu_entry_t e;
+  long boot_entry;
+
+  if (argc != 1)
+    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("unexpected argument %s"),
+		       argv[0]);
+  boot_entry = grub_strtoul(argv[0], NULL, 0);
+  if (grub_errno != GRUB_ERR_NONE)
+    {
+      grub_error_pop();
+      return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid boot entry %lu"),
+			 boot_entry);
+    }
+
+  menu = grub_env_get_menu();
+  if (!menu)
+    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid boot entry %lu"),
+		       boot_entry);
+
+  e = grub_menu_get_entry (menu, boot_entry);
+  if (e == NULL)
+    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("invalid boot entry %lu"),
+		       boot_entry);
+
+  grub_menu_execute_entry (e, 0);
+
+  return 0;
+}
+
+static grub_command_t cmd_clear, cmd_choose;
 
 static void (*grub_xputs_saved) (const char *str);
 static const char *features[] = {
@@ -584,6 +614,9 @@ GRUB_MOD_INIT(normal)
   cmd_clear =
     grub_register_command ("clear", grub_mini_cmd_clear,
 			   0, N_("Clear the screen."));
+
+  cmd_choose =
+    grub_register_command ("choose", grub_cmd_choose, 0, N_("Choose a boot menu entry."));
 
   grub_set_history (GRUB_DEFAULT_HISTORY_SIZE);
 

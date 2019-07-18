@@ -112,6 +112,7 @@ int grub_menu_get_timeout (void);
 void grub_menu_set_timeout (int timeout);
 void grub_menu_entry_run (grub_menu_entry_t entry);
 int grub_menu_get_default_entry_index (grub_menu_t menu);
+grub_err_t grub_menu_execute_entry(grub_menu_entry_t entry, int auto_boot);
 
 void grub_menu_init (void);
 void grub_menu_fini (void);

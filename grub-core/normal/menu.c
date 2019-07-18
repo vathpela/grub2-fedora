@@ -286,7 +286,7 @@ get_and_remove_first_entry_number (grub_menu_t menu, const char *name)
 }
 
 /* Run a menu entry.  */
-static grub_err_t
+grub_err_t
 grub_menu_execute_entry(grub_menu_entry_t entry, int auto_boot)
 {
   grub_err_t err = GRUB_ERR_NONE;
