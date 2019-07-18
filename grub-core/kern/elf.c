@@ -141,6 +141,7 @@ grub_elf_open (const char *name, enum grub_file_type type)
   grub_file_t file;
   grub_elf_t elf;
 
+  grub_dprintf("elf", "opening %s\n", name);
   file = grub_file_open (name, type);
   if (! file)
     return 0;

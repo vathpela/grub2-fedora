@@ -133,6 +133,7 @@ read_config_file (const char *config)
     }
 
   /* Try to open the config file.  */
+  grub_dprintf("normal", "opening %s\n", config);
   rawfile = grub_file_open (config, GRUB_FILE_TYPE_CONFIG);
   if (! rawfile)
     return 0;
@@ -340,9 +341,11 @@ grub_try_normal (const char *variable)
     const char *prefix;
     grub_err_t err = GRUB_ERR_FILE_NOT_FOUND;
 
+    grub_dprintf("normal", "getting prefix from variable %s\n", variable);
     prefix = grub_env_get (variable);
     if (!prefix)
       return GRUB_ERR_FILE_NOT_FOUND;
+    grub_dprintf("normal", "prefix is \"%s\"\n", prefix);
 
     if (grub_strncmp (prefix + 1, "tftp", sizeof ("tftp") - 1) == 0)
       {
@@ -360,17 +363,18 @@ grub_try_normal (const char *variable)
 
     if (err != GRUB_ERR_NONE)
       {
-       config = grub_xasprintf ("%s/grub.cfg", prefix);
-       if (config)
-         {
-           grub_file_t file;
-           file = grub_file_open (config, GRUB_FILE_TYPE_CONFIG);
-           if (file)
-             {
-               grub_file_close (file);
-               err = GRUB_ERR_NONE;
-             }
-         }
+	config = grub_xasprintf ("%s/grub.cfg", prefix);
+	if (config)
+	  {
+	    grub_file_t file;
+	    grub_dprintf("normal", "opening %s\n", config);
+	    file = grub_file_open (config, GRUB_FILE_TYPE_CONFIG);
+	    if (file)
+	      {
+		grub_file_close (file);
+		err = GRUB_ERR_NONE;
+	      }
+	  }
       }
 
     if (err == GRUB_ERR_NONE)

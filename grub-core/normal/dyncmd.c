@@ -106,6 +106,7 @@ read_command_list (const char *prefix)
 	{
 	  grub_file_t file;
 
+	  grub_dprintf("dyncmd", "opening %s\n", filename);
 	  file = grub_file_open (filename, GRUB_FILE_TYPE_GRUB_MODULE_LIST);
 	  if (file)
 	    {

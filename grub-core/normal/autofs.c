@@ -73,6 +73,7 @@ read_fs_list (const char *prefix)
 	  tmp_autoload_hook = grub_fs_autoload_hook;
 	  grub_fs_autoload_hook = NULL;
 
+	  grub_dprintf("autofs", "opening %s\n", filename);
 	  file = grub_file_open (filename, GRUB_FILE_TYPE_GRUB_MODULE_LIST);
 	  if (file)
 	    {

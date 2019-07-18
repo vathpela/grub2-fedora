@@ -77,6 +77,7 @@ grub_file_open (const char *name, enum grub_file_type type)
   else
     file_name = name;
 
+  grub_dprintf("file", "opening device %s\n", device_name);
   device = grub_device_open (device_name);
   grub_free (device_name);
   if (! device)

@@ -145,6 +145,7 @@ iterate_disk (const char *disk_name, void *data)
   if (ctx->hook (disk_name, ctx->hook_data))
     return 1;
 
+  grub_dprintf("device", "opening device %s\n", disk_name);
   dev = grub_device_open (disk_name);
   if (! dev)
     {

@@ -92,6 +92,8 @@ grub_efi_init (void)
 	      0, 0, 0, NULL);
 
   grub_efi_env_init ();
+  grub_env_set("debug", "all,-lexer,-scripting,-modules,-dl,-gdb,-efidisk_read,-efidisk_write,-efidisk,-gpt,-xfs,-fs,-completion,-device,-file,-disk");
+  //grub_env_set("debug", "all,-lexer,-scripting,-efidisk_read,-efidisk_write");
   grub_efi_print_gdb_info ();
   grub_efidisk_init ();
 }
@@ -110,6 +112,8 @@ grub_machine_get_bootlocation (char **device, char **path)
   if (!image)
     return;
   *device = grub_efidisk_get_device_name (image->device_handle);
+  grub_dprintf("bootlocation", "name of image->device_handle is \"%s\"\n",
+	       *device ? *device : "(null)");
   if (!*device && grub_efi_net_config)
     {
       grub_efi_net_config (image->device_handle, device, path);
@@ -117,12 +121,15 @@ grub_machine_get_bootlocation (char **device, char **path)
     }
 
   *path = grub_efi_get_filename (image->file_path);
+  grub_dprintf("bootlocation", "file path is \"%s\"\n",
+	       *path ? *path : "(null)");
   if (*path)
     {
       /* Get the directory.  */
       p = grub_strrchr (*path, '/');
       if (p)
         *p = '\0';
+      grub_dprintf("bootlocation", "shortened to \"%s\"\n", *path);
     }
 }
 

@@ -126,14 +126,14 @@ grub_set_prefix_and_root (void)
   grub_register_variable_hook ("root", 0, grub_env_write_root);
 
   grub_machine_get_bootlocation (&fwdevice, &fwpath);
+  grub_dprintf("fw_path", "fwdevice=\"%s\" fwpath=\"%s\"\n",
+	       fwdevice ? fwdevice : "(null)",
+	       fwpath ? fwpath : "(null)");
 
   if (fwdevice && fwpath)
     {
       char *fw_path;
       char separator[3] = ")";
-
-      grub_dprintf ("fw_path", "\n");
-      grub_dprintf ("fw_path", "fwdevice:\"%s\" fwpath:\"%s\"\n", fwdevice, fwpath);
 
       if (!grub_strncmp(fwdevice, "http", 4) && fwpath[0] != '/')
 	grub_strcpy(separator, ")/");
@@ -219,9 +219,11 @@ grub_set_prefix_and_root (void)
       if (prefix_set)
 	{
 	  grub_env_set ("prefix", prefix_set);
+	  grub_dprintf("prefix", "prefix is \"%s\"\n", prefix_set);
 	  grub_free (prefix_set);
 	}
       grub_env_set ("root", device);
+      grub_dprintf("root", "root is \"%s\"\n", device);
     }
 
   grub_free (device);

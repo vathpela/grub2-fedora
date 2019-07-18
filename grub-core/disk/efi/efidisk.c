@@ -567,7 +567,7 @@ grub_efidisk_read (struct grub_disk *disk, grub_disk_addr_t sector,
 {
   grub_efi_status_t status;
 
-  grub_dprintf ("efidisk",
+  grub_dprintf ("efidisk_read",
 		"reading 0x%lx sectors at the sector 0x%llx from %s\n",
 		(unsigned long) size, (unsigned long long) sector, disk->name);
 
@@ -590,7 +590,7 @@ grub_efidisk_write (struct grub_disk *disk, grub_disk_addr_t sector,
 {
   grub_efi_status_t status;
 
-  grub_dprintf ("efidisk",
+  grub_dprintf ("efidisk_write",
 		"writing 0x%lx sectors at the sector 0x%llx to %s\n",
 		(unsigned long) size, (unsigned long long) sector, disk->name);
 
@@ -790,9 +790,13 @@ grub_efidisk_get_device_name (grub_efi_handle_t *handle)
   if (! dp)
     return 0;
 
+  grub_dprintf ("efidisk", "device path is:\"%pD\" \n", dp);
+
   ldp = grub_efi_find_last_device_path (dp);
   if (! ldp)
     return 0;
+
+  grub_dprintf ("efidisk", "last dp is:\"%pD\" \n", ldp);
 
   if (GRUB_EFI_DEVICE_PATH_TYPE (ldp) == GRUB_EFI_MEDIA_DEVICE_PATH_TYPE
       && (GRUB_EFI_DEVICE_PATH_SUBTYPE (ldp) == GRUB_EFI_CDROM_DEVICE_PATH_SUBTYPE

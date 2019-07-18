@@ -160,6 +160,7 @@ iterate_dev (const char *devname, void *data __attribute__ ((unused)))
 {
   grub_device_t dev;
 
+  grub_dprintf("completion", "opening device %s\n", devname);
   /* Complete the partition part.  */
   dev = grub_device_open (devname);
 
@@ -213,6 +214,7 @@ complete_device (void)
     {
       /* Complete the partition part.  */
       *p = '\0';
+      grub_dprintf("completion", "opening device %s\n", current_word);
       dev = grub_device_open (current_word);
       *p = ',';
       grub_errno = GRUB_ERR_NONE;
@@ -252,6 +254,7 @@ complete_file (void)
   if (grub_errno != GRUB_ERR_NONE)
     return 1;
 
+  grub_dprintf("completion", "opening device %s\n", device);
   dev = grub_device_open (device);
   if (! dev)
     {

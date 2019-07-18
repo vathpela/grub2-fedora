@@ -94,6 +94,7 @@ read_crypto_list (const char *prefix)
       return;
     }
 
+  grub_dprintf("crypto", "opening %s\n", filename);
   file = grub_file_open (filename, GRUB_FILE_TYPE_GRUB_MODULE_LIST);
   grub_free (filename);
   if (!file)

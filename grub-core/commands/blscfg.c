@@ -921,6 +921,7 @@ bls_load_entries (const char *path)
   };
 
   if (path) {
+    grub_dprintf("blscfg", "looking for file path %s\n", path);
     len = grub_strlen (path);
     if (grub_strcmp (path + len - 5, ".conf") == 0) {
       rei.file = grub_file_open (path, GRUB_FILE_TYPE_CONFIG);
