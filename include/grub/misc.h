@@ -355,6 +355,12 @@ grub_strchrsub (char *output, const char *input, char ch, const char *with)
 }
 
 extern void (*EXPORT_VAR (grub_xputs)) (const char *str);
+extern void (*EXPORT_VAR (grub_dumb_xputs)) (const char *);
+extern void EXPORT_FUNC (grub_set_dumb_xputs) (void);
+extern void EXPORT_FUNC (grub_xputs_dumb) (const char *);
+extern void EXPORT_FUNC (grub_xputllu_dumb) (unsigned long long x);
+extern void EXPORT_FUNC (grub_xputlld_dumb) (long long x);
+extern void EXPORT_FUNC (grub_xputllx_dumb) (unsigned long long x);
 
 static inline int
 grub_puts (const char *s)

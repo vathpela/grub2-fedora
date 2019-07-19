@@ -271,8 +271,11 @@ reclaim_module_space (void)
 void __attribute__ ((noreturn))
 grub_main (void)
 {
+  grub_set_dumb_xputs();
+
   /* First of all, initialize the machine.  */
   grub_machine_init ();
+  grub_set_dumb_xputs();
 
   grub_boot_time ("After machine init.");
 

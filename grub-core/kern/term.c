@@ -66,7 +66,14 @@ grub_putcode_dumb (grub_uint32_t code,
     grub_putcode_dumb ('\r', term);
 }
 
-static void
+void
+grub_set_dumb_xputs(void)
+{
+  grub_dumb_xputs = grub_xputs_dumb;
+  grub_dprintf("term", "grub_dumb_xputs:%p\n", grub_dumb_xputs);
+}
+
+void
 grub_xputs_dumb (const char *str)
 {
   for (; *str; str++)
@@ -82,6 +89,101 @@ grub_xputs_dumb (const char *str)
 }
 
 void (*grub_xputs) (const char *str) = grub_xputs_dumb;
+
+void
+grub_xputllu_dumb(unsigned long long x)
+{
+  int found = 0;
+  char buf[] = "0";
+
+  if (x == 0)
+    {
+      grub_xputs_dumb ("0");
+      return;
+    }
+
+  for (grub_uint64_t y = 10000000000000000000ull;
+       y != 0;
+       y = grub_divmod64 (y, 10, NULL))
+    {
+      grub_uint64_t z = grub_divmod64 (x, y, NULL);
+
+      if (z || found)
+	{
+	  found = 1;
+	  buf[0] = '0' + z;
+	  grub_xputs_dumb(buf);
+	}
+
+      x -= z;
+    }
+}
+
+void
+grub_xputlld_dumb(long long x)
+{
+  int found = 0;
+  char buf[] = "0";
+
+  if (x == 0)
+    {
+      grub_xputs_dumb ("0");
+      return;
+    }
+
+  if (x < 0)
+    {
+      grub_xputs_dumb ("-");
+      x = ~x + 1;
+    }
+
+  for (grub_uint64_t y = 10000000000000000000ull;
+       y != 0;
+       y = grub_divmod64 (y, 10, NULL))
+    {
+      grub_uint64_t z = grub_divmod64 (x, y, NULL);
+
+      if (z || found)
+	{
+	  found = 1;
+	  buf[0] = '0' + z;
+	  grub_xputs_dumb(buf);
+	}
+
+      x -= z;
+    }
+}
+
+const char hexchars[17] = "0123456789abcdef";
+
+void
+grub_xputllx_dumb(unsigned long long x)
+{
+  int found = 0;
+  char buf[] = "0";
+
+  grub_xputs_dumb ("0x");
+
+  if (x == 0)
+    {
+      grub_xputs_dumb ("0");
+      return;
+    }
+
+  for (grub_uint64_t mask = 0xfull << 60, i = 60; mask; mask >>= 4, i -= 4)
+    {
+      grub_uint64_t y = (mask & x) >> i;
+
+      if (!found && y == 0)
+	continue;
+      found = 1;
+
+      buf[0] = hexchars[y];
+      x &= ~mask;
+
+      grub_xputs_dumb(buf);
+    }
+}
 
 int
 grub_getkey_noblock (void)

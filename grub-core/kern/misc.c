@@ -190,20 +190,114 @@ grub_debug_enabled (const char * condition)
   return 0;
 }
 
+void (*grub_dumb_xputs)(const char *) = NULL;
+static int grub_real_vprintf (int force_dumb, const char *fmt, va_list ap);
+
 void
 grub_real_dprintf (const char *file, const int line, const char *condition,
-		   const char *fmt, ...)
+                   const char *fmt, ...)
 {
   va_list args;
+  char *buf0 = NULL, *buf1 = NULL, *spacebuf = NULL;
+  grub_ssize_t len0, len1, spaces, stride;
+  char c, *nul;
 
-  if (grub_debug_enabled (condition))
+  if (!grub_debug_enabled (condition))
+    return;
+
+  if (!grub_dumb_xputs)
+    grub_dumb_xputs = grub_xputs;
+
+  buf0 = grub_xasprintf ("%s:%d: ", file, line);
+  if (!buf0)
+    return;
+
+  len0 = grub_strlen (buf0);
+
+  buf1 = buf0;
+  for (stride = len1 = len0; len1 > 0; len1 -= stride)
     {
-      grub_printf ("%s:%d: ", file, line);
-      va_start (args, fmt);
-      grub_vprintf (fmt, args);
-      va_end (args);
+      if (stride > 79)
+        stride = 79;
+      if (stride > len1)
+        stride = len1;
+
+      nul = buf1 + stride;
+      c = *nul;
+      *nul = '\0';
+
+      grub_dumb_xputs (buf1);
+      if (c != '\0')
+        grub_dumb_xputs ("\n");
       grub_refresh ();
+
+      *nul = c;
+      buf1 = nul;
     }
+
+  spaces = stride;
+  spacebuf = buf0;
+  grub_memset (spacebuf, ' ', spaces);
+  spacebuf[spaces] = '\0';
+
+  va_start (args, fmt);
+  buf0 = grub_xvasprintf (fmt, args);
+  va_end (args);
+  if (!buf0)
+    goto err;
+
+  buf1 = buf0;
+  for (len1 = grub_strlen (buf1); len1 > 0; len1 -= stride)
+    {
+      char *space;
+
+      stride = len1;
+      if (stride > 79 - spaces)
+        stride = 79 - spaces;
+      if (stride > len1)
+        stride = len1;
+
+      if (buf1 != buf0)
+	{
+	  grub_dumb_xputs (spacebuf);
+	  for (; len1 && buf1[0] == ' '; len1--, stride--)
+	    buf1++;
+	}
+
+      nul = buf1 + stride;
+      c = *nul;
+      *nul = '\0';
+
+      while (c != '\0' && (space = grub_strrchr (buf1, ' ')) != NULL)
+        {
+          if (space - buf1 < ((79 - spaces) >> 1))
+            break;
+
+          stride -= nul - space;
+          *nul = c;
+          nul = space;
+          c = *nul;
+          *nul = '\0';
+          break;
+        }
+
+      grub_dumb_xputs (buf1);
+
+      if (c != '\0')
+        grub_dumb_xputs ("\n");
+
+      grub_refresh ();
+
+      *nul = c;
+      for (buf1 = nul; len1 >= 0 && *buf1 == ' '; buf1++, len1--)
+	;
+    }
+
+err:
+  if (buf0)
+    grub_free (buf0);
+  if (spacebuf)
+    grub_free (spacebuf);
 }
 
 void
@@ -215,15 +309,15 @@ grub_qdprintf (const char *condition, const char *fmt, ...)
     return;
 
   va_start (args, fmt);
-  grub_vprintf (fmt, args);
+  grub_real_vprintf (1, fmt, args);
   va_end (args);
   grub_refresh ();
 }
 
 #define PREALLOC_SIZE 255
 
-int
-grub_vprintf (const char *fmt, va_list ap)
+static int
+grub_real_vprintf (int force_dumb, const char *fmt, va_list ap)
 {
   grub_size_t s;
   static char buf[PREALLOC_SIZE + 1];
@@ -251,12 +345,26 @@ grub_vprintf (const char *fmt, va_list ap)
 
   free_printf_args (&args);
 
-  grub_xputs (curbuf);
+  if (force_dumb)
+    {
+      if (grub_dumb_xputs)
+	grub_dumb_xputs (curbuf);
+    }
+  else
+    {
+      grub_xputs (curbuf);
+    }
 
   if (curbuf != buf)
     grub_free (curbuf);
 
   return s;
+}
+
+int
+grub_vprintf (const char *fmt, va_list ap)
+{
+  return grub_real_vprintf (0, fmt, ap);
 }
 
 int

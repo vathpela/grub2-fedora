@@ -22,8 +22,8 @@
 #include <grub/gdb.h>
 #include <grub/serial.h>
 #include <grub/backtrace.h>
+#include <grub/term.h>
 
-static const char hexchars[] = "0123456789abcdef";
 int grub_gdb_regs[GRUB_MACHINE_NR_REGS];
 
 #define GRUB_GDB_COMBUF_SIZE 400	/* At least sizeof(grub_gdb_regs)*2 are needed for

@@ -458,6 +458,7 @@ grub_print_spaces (struct grub_term_output *term, int number_spaces)
 }
 
 extern void (*EXPORT_VAR (grub_term_poll_usb)) (int wait_for_completion);
+extern const char EXPORT_VAR (hexchars)[17];
 
 #define GRUB_TERM_REPEAT_PRE_INTERVAL 400
 #define GRUB_TERM_REPEAT_INTERVAL 50

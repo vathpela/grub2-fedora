@@ -604,6 +604,8 @@ GRUB_MOD_INIT(normal)
   grub_script_init ();
   grub_menu_init ();
 
+  grub_set_dumb_xputs();
+
   grub_xputs_saved = grub_xputs;
   grub_xputs = grub_xputs_normal;
 
