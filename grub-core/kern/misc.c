@@ -813,17 +813,11 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 	{
 	  char prev = c;
 
-	  if (c == 'h')
-	    longfmt = -1;
-	  else
-	    longfmt = 1;
+	  longfmt = c == 'h' ? -1 : 1;
 
 	  c = *fmt++;
 	  if (c == prev) {
-	      if (c == 'h')
-		longfmt = -2;
-	      else
-		longfmt = 2;
+	      longfmt *= 2;
 	      c = *fmt++;
 	  }
 	}
@@ -900,7 +894,7 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 static inline void __attribute__ ((always_inline))
 write_char (char *str, grub_size_t *count, grub_size_t max_len, unsigned char ch)
 {
-  if (*count < max_len)
+  if (str && *count < max_len)
     str[*count] = ch;
 
   (*count)++;
@@ -1095,10 +1089,13 @@ grub_vsnprintf_real (char *str, grub_size_t max_len, const char *fmt0,
 	}
     }
 
-  if (count < max_len)
-    str[count] = '\0';
-  else
-    str[max_len] = '\0';
+  if (str)
+    {
+      if (count < max_len)
+	str[count] = '\0';
+      else if (max_len > 0)
+	str[max_len - 1] = '\0';
+    }
   return count;
 }
 
@@ -1108,16 +1105,14 @@ grub_vsnprintf (char *str, grub_size_t n, const char *fmt, va_list ap)
   grub_size_t ret;
   struct printf_args args;
 
-  if (!n)
-    return 0;
-
-  n--;
-
   parse_printf_args (fmt, &args, ap);
 
   ret = grub_vsnprintf_real (str, n, fmt, &args);
 
   free_printf_args (&args);
+
+  if (!str)
+    return ret;
 
   return ret < n ? ret : n;
 }
@@ -1138,32 +1133,28 @@ grub_snprintf (char *str, grub_size_t n, const char *fmt, ...)
 char *
 grub_xvasprintf (const char *fmt, va_list ap)
 {
-  grub_size_t s, as = PREALLOC_SIZE;
-  char *ret;
+  grub_ssize_t s;
+  char *ret = NULL;
   struct printf_args args;
 
   parse_printf_args (fmt, &args, ap);
 
-  while (1)
-    {
-      ret = grub_malloc (as + 1);
-      if (!ret)
-	{
-	  free_printf_args (&args);
-	  return NULL;
-	}
+  s = grub_vsnprintf_real (NULL, 0, fmt, &args);
+  if (s < 0)
+    goto err;
 
-      s = grub_vsnprintf_real (ret, as, fmt, &args);
+  s++;
+  ret = grub_malloc (s);
+  if (!ret)
+    goto err;
 
-      if (s <= as)
-	{
-	  free_printf_args (&args);
-	  return ret;
-	}
+  grub_vsnprintf_real (ret, s, fmt, &args);
+err:
+  if (ret == NULL)
+    grub_error_pop ();
 
-      grub_free (ret);
-      as = s;
-    }
+  free_printf_args (&args);
+  return ret;
 }
 
 char *
