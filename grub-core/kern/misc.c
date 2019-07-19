@@ -748,7 +748,8 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 	case 'C':
 	case 's':
 #if defined(GRUB_MACHINE_EFI)
-	  if (c == 'u' && *fmt == 'r')
+	  if ((c == 'u' && *fmt == 'r') ||
+	      (c == 'p' && *fmt == 'G'))
 	    fmt++;
 #endif
 	  args->count++;
@@ -847,6 +848,11 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 	  args->ptr[curn].type = INT + longfmt;
 	  break;
 	case 'p':
+#if defined(GRUB_MACHINE_EFI)
+	  if (*fmt == 'G')
+	    fmt++;
+#endif
+	  /* fall through. */
 	case 's':
 	  if (sizeof (void *) == sizeof (long long))
 	    args->ptr[curn].type = UNSIGNED_LONGLONG;
@@ -998,6 +1004,23 @@ grub_vsnprintf_real (char *str, grub_size_t max_len, const char *fmt0,
       switch (c)
 	{
 	case 'p':
+#if defined(GRUB_MACHINE_EFI)
+	  if (*fmt == 'G')
+	    {
+	      grub_ssize_t sz;
+	      grub_efi_guid_t *guid = (void *)(grub_uintptr_t)curarg;
+
+	      fmt++;
+	      sz = grub_efi_fmt_guid (str ? str + count : str,
+				      max_len ? max_len - count : max_len,
+				      guid);
+	      if (sz < 0)
+		return sz;
+
+	      count += sz;
+	      continue;
+	    }
+#endif
 	  write_char (str, &count, max_len, '0');
 	  write_char (str, &count, max_len, 'x');
 	  c = 'x';
