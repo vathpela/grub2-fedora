@@ -271,7 +271,7 @@ allocate_initrd_mem (grub_size_t initrd_pages)
 
   max_addr += INITRD_MAX_ADDRESS_OFFSET - 1;
   grub_dprintf ("linux",
-		"calling grub_efi_allocate_pages_real (0x%0"PRIxGRUB_ADDR", 0x%08x, EFI_ALLOCATE_MAX_ADDRESS, EFI_LOADER_DATA)",
+		"calling grub_efi_allocate_pages_real (0x%0"PRIxGRUB_ADDR", 0x%08zx, EFI_ALLOCATE_MAX_ADDRESS, EFI_LOADER_DATA)\n",
 		max_addr, initrd_pages);
 
   ret = grub_efi_allocate_pages_real (max_addr, initrd_pages,
@@ -322,7 +322,7 @@ grub_cmd_initrd (grub_command_t cmd __attribute__ ((unused)),
 
   initrd_start = (grub_addr_t) initrd_mem;
   initrd_end = initrd_start + initrd_size;
-  grub_dprintf ("linux", "[addr=%p, size=0x%x]\n",
+  grub_dprintf ("linux", "[addr=%p, size=0x%zx]\n",
 		(void *) initrd_start, initrd_size);
 
  fail:
