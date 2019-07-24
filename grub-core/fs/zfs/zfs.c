@@ -55,6 +55,7 @@
 #include <grub/deflate.h>
 #include <grub/crypto.h>
 #include <grub/i18n.h>
+#include <grub/gf256.h>
 
 GRUB_MOD_LICENSE ("GPLv3+");
 
@@ -1273,12 +1274,6 @@ scan_devices (struct grub_zfs_data *data)
   return GRUB_ERR_NONE;
 }
 
-/* x**y.  */
-static grub_uint8_t powx[255 * 2];
-/* Such an s that x**s = y */
-static int powx_inv[256];
-static const grub_uint8_t poly = 0x1d;
-
 /* perform the operation a ^= b * (x ** (known_idx * recovery_pow) ) */
 static inline void
 xor_out (grub_uint8_t *a, const grub_uint8_t *b, grub_size_t s,
@@ -1295,15 +1290,7 @@ xor_out (grub_uint8_t *a, const grub_uint8_t *b, grub_size_t s,
   add = (known_idx * recovery_pow) % 255;
   for (;s--; b++, a++)
     if (*b)
-      *a ^= powx[powx_inv[*b] + add];
-}
-
-static inline grub_uint8_t
-gf_mul (grub_uint8_t a, grub_uint8_t b)
-{
-  if (a == 0 || b == 0)
-    return 0;
-  return powx[powx_inv[a] + powx_inv[b]];
+      *a ^= grub_gf256_mulx (add, *b);
 }
 
 #define MAX_NBUFS 4
@@ -1329,7 +1316,7 @@ recovery (grub_uint8_t *bufs[4], grub_size_t s, const int nbufs,
 	add = 255 - ((powers[0] * idx[0]) % 255);
 	for (a = bufs[0]; s--; a++)
 	  if (*a)
-	    *a = powx[powx_inv[*a] + add];
+	    *a = grub_gf256_mulx (add, *a);
 	return GRUB_ERR_NONE;
       }
       /* Case 2x2: Let's use the determinant formula.  */
@@ -1339,25 +1326,25 @@ recovery (grub_uint8_t *bufs[4], grub_size_t s, const int nbufs,
 	grub_uint8_t matrixinv[2][2];
 	unsigned i;
 	/* The determinant is: */
-	det = (powx[(powers[0] * idx[0] + powers[1] * idx[1]) % 255]
-	       ^ powx[(powers[0] * idx[1] + powers[1] * idx[0]) % 255]);
+	det = (grub_gf256_powx[(powers[0] * idx[0] + powers[1] * idx[1]) % 255]
+	       ^ grub_gf256_powx[(powers[0] * idx[1] + powers[1] * idx[0]) % 255]);
 	if (det == 0)
 	  return grub_error (GRUB_ERR_BAD_FS, "singular recovery matrix");
-	det_inv = powx[255 - powx_inv[det]];
-	matrixinv[0][0] = gf_mul (powx[(powers[1] * idx[1]) % 255], det_inv);
-	matrixinv[1][1] = gf_mul (powx[(powers[0] * idx[0]) % 255], det_inv);
-	matrixinv[0][1] = gf_mul (powx[(powers[0] * idx[1]) % 255], det_inv);
-	matrixinv[1][0] = gf_mul (powx[(powers[1] * idx[0]) % 255], det_inv);
+	det_inv = grub_gf256_invert (det);
+	matrixinv[0][0] = grub_gf256_mul (grub_gf256_powx[(powers[1] * idx[1]) % 255], det_inv);
+	matrixinv[1][1] = grub_gf256_mul (grub_gf256_powx[(powers[0] * idx[0]) % 255], det_inv);
+	matrixinv[0][1] = grub_gf256_mul (grub_gf256_powx[(powers[0] * idx[1]) % 255], det_inv);
+	matrixinv[1][0] = grub_gf256_mul (grub_gf256_powx[(powers[1] * idx[0]) % 255], det_inv);
 	for (i = 0; i < s; i++)
 	  {
 	    grub_uint8_t b0, b1;
 	    b0 = bufs[0][i];
 	    b1 = bufs[1][i];
 
-	    bufs[0][i] = (gf_mul (b0, matrixinv[0][0])
-			  ^ gf_mul (b1, matrixinv[0][1]));
-	    bufs[1][i] = (gf_mul (b0, matrixinv[1][0])
-			  ^ gf_mul (b1, matrixinv[1][1]));
+	    bufs[0][i] = (grub_gf256_mul (b0, matrixinv[0][0])
+			  ^ grub_gf256_mul (b1, matrixinv[0][1]));
+	    bufs[1][i] = (grub_gf256_mul (b0, matrixinv[1][0])
+			  ^ grub_gf256_mul (b1, matrixinv[1][1]));
 	  }
 	return GRUB_ERR_NONE;
       }
@@ -1369,7 +1356,7 @@ recovery (grub_uint8_t *bufs[4], grub_size_t s, const int nbufs,
 
 	for (i = 0; i < nbufs; i++)
 	  for (j = 0; j < nbufs; j++)
-	    matrix1[i][j] = powx[(powers[i] * idx[j]) % 255];
+	    matrix1[i][j] = grub_gf256_powx[(powers[i] * idx[j]) % 255];
 	for (i = 0; i < nbufs; i++)
 	  for (j = 0; j < nbufs; j++)
 	    matrix2[i][j] = 0;
@@ -1403,18 +1390,18 @@ recovery (grub_uint8_t *bufs[4], grub_size_t s, const int nbufs,
 		    matrix2[i][j] = t;
 		  }
 	      }
-	    mul = powx[255 - powx_inv[matrix1[i][i]]];
+	    mul = grub_gf256_invert (matrix1[i][i]);
 	    for (j = 0; j < nbufs; j++)
-	      matrix1[i][j] = gf_mul (matrix1[i][j], mul);
+	      matrix1[i][j] = grub_gf256_mul (matrix1[i][j], mul);
 	    for (j = 0; j < nbufs; j++)
-	      matrix2[i][j] = gf_mul (matrix2[i][j], mul);
+	      matrix2[i][j] = grub_gf256_mul (matrix2[i][j], mul);
 	    for (j = i + 1; j < nbufs; j++)
 	      {
 		mul = matrix1[j][i];
 		for (k = 0; k < nbufs; k++)
-		  matrix1[j][k] ^= gf_mul (matrix1[i][k], mul);
+		  matrix1[j][k] ^= grub_gf256_mul (matrix1[i][k], mul);
 		for (k = 0; k < nbufs; k++)
-		  matrix2[j][k] ^= gf_mul (matrix2[i][k], mul);
+		  matrix2[j][k] ^= grub_gf256_mul (matrix2[i][k], mul);
 	      }
 	  }
 	for (i = nbufs - 1; i >= 0; i--)
@@ -1424,9 +1411,9 @@ recovery (grub_uint8_t *bufs[4], grub_size_t s, const int nbufs,
 		grub_uint8_t mul;
 		mul = matrix1[j][i];
 		for (k = 0; k < nbufs; k++)
-		  matrix1[j][k] ^= gf_mul (matrix1[i][k], mul);
+		  matrix1[j][k] ^= grub_gf256_mul (matrix1[i][k], mul);
 		for (k = 0; k < nbufs; k++)
-		  matrix2[j][k] ^= gf_mul (matrix2[i][k], mul);
+		  matrix2[j][k] ^= grub_gf256_mul (matrix2[i][k], mul);
 	      }
 	  }
 
@@ -1439,7 +1426,7 @@ recovery (grub_uint8_t *bufs[4], grub_size_t s, const int nbufs,
 	      {
 		bufs[j][i] = 0;
 		for (k = 0; k < nbufs; k++)
-		  bufs[j][i] ^= gf_mul (matrix2[j][k], b[k]);
+		  bufs[j][i] ^= grub_gf256_mul (matrix2[j][k], b[k]);
 	      }
 	  }
 	return GRUB_ERR_NONE;
@@ -1577,22 +1564,6 @@ read_device (grub_uint64_t offset, struct grub_zfs_device_desc *desc,
 	    unsigned n_redundancy = 0;
 	    unsigned i, j;
 	    grub_err_t err;
-
-	    /* Compute mul. x**s has a period of 255.  */
-	    if (powx[0] == 0)
-	      {
-		grub_uint8_t cur = 1;
-		for (i = 0; i < 255; i++)
-		  {
-		    powx[i] = cur;
-		    powx[i + 255] = cur;
-		    powx_inv[cur] = i;
-		    if (cur & 0x80)
-		      cur = (cur << 1) ^ poly;
-		    else
-		      cur <<= 1;
-		  }
-	      }
 
 	    /* Read redundancy data.  */
 	    for (n_redundancy = 0, cur_redundancy_pow = 0;

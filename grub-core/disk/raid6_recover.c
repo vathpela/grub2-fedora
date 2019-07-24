@@ -24,14 +24,9 @@
 #include <grub/misc.h>
 #include <grub/diskfilter.h>
 #include <grub/crypto.h>
+#include <grub/gf256.h>
 
 GRUB_MOD_LICENSE ("GPLv3+");
-
-/* x**y.  */
-static grub_uint8_t powx[255 * 2];
-/* Such an s that x**s = y */
-static unsigned powx_inv[256];
-static const grub_uint8_t poly = 0x1d;
 
 static void
 grub_raid_block_mulx (unsigned mul, char *buf, grub_size_t size)
@@ -42,25 +37,7 @@ grub_raid_block_mulx (unsigned mul, char *buf, grub_size_t size)
   p = (grub_uint8_t *) buf;
   for (i = 0; i < size; i++, p++)
     if (*p)
-      *p = powx[mul + powx_inv[*p]];
-}
-
-static void
-grub_raid6_init_table (void)
-{
-  unsigned i;
-
-  grub_uint8_t cur = 1;
-  for (i = 0; i < 255; i++)
-    {
-      powx[i] = cur;
-      powx[i + 255] = cur;
-      powx_inv[cur] = i;
-      if (cur & 0x80)
-	cur = (cur << 1) ^ poly;
-      else
-	cur <<= 1;
-    }
+      *p = grub_gf256_mulx(mul, *p);
 }
 
 static unsigned
@@ -180,7 +157,7 @@ grub_raid6_recover_gen (void *data, grub_uint64_t nstripes, int disknr, int p,
       grub_crypto_xor (qbuf, qbuf, buf, size);
 
       c = mod_255((255 ^ bad1)
-		  + (255 ^ powx_inv[(powx[bad2 + (bad1 ^ 255)] ^ 1)]));
+		  + (255 ^ grub_gf256_powx_inv[(grub_gf256_powx[bad2 + (bad1 ^ 255)] ^ 1)]));
       grub_raid_block_mulx (c, qbuf, size);
 
       c = mod_255((unsigned) bad2 + c);
@@ -208,7 +185,6 @@ grub_raid6_recover (struct grub_diskfilter_segment *array, int disknr, int p,
 
 GRUB_MOD_INIT(raid6rec)
 {
-  grub_raid6_init_table ();
   grub_raid6_recover_func = grub_raid6_recover;
 }
 

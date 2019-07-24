@@ -599,6 +599,11 @@ module = {
 };
 
 module = {
+  name = gf256;
+  common = lib/gf256.c;
+};
+
+module = {
   name = cs5536;
   x86 = bus/cs5536.c;
   enable = x86;
