@@ -55,6 +55,7 @@ Makefile.in
 /po/Rules-quot
 /stamp-h
 /stamp-h1
+bootstrap.log
 config.log
 config.status
 
