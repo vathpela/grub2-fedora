@@ -646,7 +646,7 @@ SETUP (const char *dir,
 
 #ifdef GRUB_SETUP_SPARC64
     {
-      int isec = BOOT_SECTOR;
+      unsigned int isec = BOOT_SECTOR;
 
       /* Write the boot image onto the disk. */
       if (grub_disk_write (dest_dev->disk, sectors[isec++], 0,

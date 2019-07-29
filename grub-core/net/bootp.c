@@ -365,7 +365,7 @@ grub_net_configure_by_dhcp_ack (const char *name,
   struct grub_net_network_level_interface *inter;
   int mask = -1;
   char server_ip[sizeof ("xxx.xxx.xxx.xxx")];
-  const grub_uint8_t *opt;
+  const char *opt;
   grub_uint8_t opt_len, overload = 0;
   const char *boot_file = 0, *server_name = 0;
   grub_size_t boot_file_len, server_name_len;
