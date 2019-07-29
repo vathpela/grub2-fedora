@@ -4,8 +4,6 @@
 /aclocal.m4
 /autom4te.cache
 /build-aux
-# we want to enable building in a subdirectory
-/build*/
 /configure
 /gnulib
 /grub-core/lib/gnulib/
@@ -15,6 +13,10 @@
 *~
 .*.sw?
 *.patch
+
+# stuff you're likely to make while building test trees
+grub.cfg
+/build*/
 
 # built objects across the whole tree
 Makefile.in
