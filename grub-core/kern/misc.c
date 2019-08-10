@@ -748,6 +748,7 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 	case 's':
 #if defined(GRUB_MACHINE_EFI)
 	  if ((c == 'u' && *fmt == 'r') ||
+	      (c == 'l' && fmt[0] == 'u' && fmt[1] == 'r') ||
 	      (c == 'p' && *fmt == 'D') ||
 	      (c == 'p' && *fmt == 'G'))
 	    fmt++;
@@ -848,7 +849,8 @@ parse_printf_args (const char *fmt0, struct printf_args *args,
 	case 'X':
 	case 'u':
 #if defined(GRUB_MACHINE_EFI)
-	  if (c == 'u' && *fmt == 'r')
+	  if ((c == 'u' && *fmt == 'r') ||
+	      (c == 'l' && fmt[0] == 'u' && fmt[1] == 'r'))
 	    fmt++;
 #endif
 	  args->ptr[curn].type = UNSIGNED_INT + longfmt;
@@ -1048,7 +1050,8 @@ grub_vsnprintf_real (char *str, grub_size_t max_len, const char *fmt0,
 	    grub_size_t fill;
 
 #if defined(GRUB_MACHINE_EFI)
-	    if (c == 'u' && *fmt == 'r')
+	    if ((c == 'u' && *fmt == 'r') ||
+	        (c == 'l' && fmt[0] == 'u' && fmt[1] == 'r'))
 	      {
 		grub_efi_status_t status;
 

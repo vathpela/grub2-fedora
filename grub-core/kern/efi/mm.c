@@ -170,7 +170,7 @@ grub_efi_allocate_pages_real (grub_efi_physical_address_t address,
   if (status != GRUB_EFI_SUCCESS)
     {
       grub_dprintf ("efi",
-		    "allocate_pages(%u, %u, 0x%0"PRIxGRUB_EFI_UINTN", 0x%"PRIxGRUB_EFI_PADDR") = %ur\n",
+		    "allocate_pages(%u, %u, 0x%0"PRIxGRUB_EFI_UINTN", 0x%"PRIxGRUB_EFI_PADDR") = %lur\n",
 		    alloctype, memtype, pages, address, status);
       grub_error (GRUB_ERR_OUT_OF_MEMORY, N_("out of memory"));
       return NULL;
