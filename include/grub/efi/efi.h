@@ -23,6 +23,7 @@
 #include <grub/types.h>
 #include <grub/dl.h>
 #include <grub/efi/api.h>
+#include <grub/cpu/linux.h>
 
 #define GRUB_EFI_GRUB_VARIABLE_GUID \
   { 0x91376aff, 0xcba6, 0x42be, \
