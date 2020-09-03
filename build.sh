@@ -23,6 +23,7 @@ efidir=BOOT
 eject=0
 gnulib_url="https://github.com/vathpela/gnulib.git"
 gnulib_revision="gcc-warnings"
+upstream_gnulib="no"
 grubarch=x64
 harden="yes" || :
 host="" || :
@@ -56,7 +57,8 @@ usage() {
         echo "             [--configure|--no-configure] [--clean|--no-clean] [--werror|--no-werror] \\"
         echo "             [--host HOST] [--debugcfg|--debugcfg=CFG|--no-debugcfg] \\"
         echo "             [--platform PLATFORM] [--scrub] [--scrub-objs] \\"
-        echo "             [--ccache|--no-ccache] [--verbose] [--scan]"
+        echo "             [--ccache|--no-ccache] [--verbose] [--scan] \\"
+        echo "             [--upstream-gnulib|--no-upstream-gnulib]"
     ) >> "${out}"
     exit "${status}"
 }
@@ -226,6 +228,12 @@ while [[ $# -gt 0 ]]; do
         " --target="*)
             target="${1:9}"
             ;;
+        " --upstream-gnulib ")
+            upstream_gnulib="yes"
+            ;;
+        " --no-upstream-gnulib ")
+            upstream_gnulib="no"
+            ;;
         " --no-werror ")
             werror="--disable-werror"
             ;;
@@ -354,11 +362,13 @@ if [[ ${configure} -gt 0 ]] || [[ ! -e Makefile ]] ; then
         pushd ..
         if [[ -f bootstrap ]] ; then
             declare -a bootstrap_vars=()
-            if [[ -n "${gnulib_url}" ]] ; then
-              bootstrap_vars[${#bootstrap_vars[@]}]="GNULIB_URL=\"${gnulib_url}\""
-            fi
-            if [[ -n "${gnulib_revision}" ]] ; then
-              bootstrap_vars[${#bootstrap_vars[@]}]="GNULIB_REVISION=\"${gnulib_revision}\""
+            if [[ "${upstream_gnulib}" = "yes" ]] ; then
+                if [[ -n "${gnulib_url}" ]] ; then
+                  bootstrap_vars[${#bootstrap_vars[@]}]="GNULIB_URL=\"${gnulib_url}\""
+                fi
+                if [[ -n "${gnulib_revision}" ]] ; then
+                  bootstrap_vars[${#bootstrap_vars[@]}]="GNULIB_REVISION=\"${gnulib_revision}\""
+                fi
             fi
             eval echo "${bootstrap_vars[@]}" PYTHON=python3 ./bootstrap
             eval "${bootstrap_vars[@]}" PYTHON=python3 ./bootstrap
@@ -429,29 +439,50 @@ fi
 echo PYTHON=python3 ${MAKE} PYTHON=python3
 PYTHON=python3 ${MAKE} PYTHON=python3 -j8
 
-MODULES="\
+declare -a MODULE_CANDIDATES
+MODULE_CANDIDATES=(\
  all_video \
- backtrace ${blscfg} boot btrfs cat chain configfile \
+ backtrace "${blscfg}" boot btrfs \
+ cat chain configfile \
  echo efifwsetup efinet ext2 \
  fat font \
  gfxmenu gfxterm gzio \
  halt hfsplus http \
- iso9660 jpeg \
+ iso9660 \
+ jpeg \
  linux loadenv loopback lvm lsefi lsefimmap \
- mdraid09 mdraid1x minicmd normal \
+ mdraid09 mdraid1x minicmd \
  part_apple part_msdos part_gpt password_pbkdf2 png \
  raid6rec reboot \
  search search_fs_uuid search_fs_file search_label serial sleep syslinuxcfg \
  test tftp \
  usb usbserial_common usbserial_pl2303 usbserial_ftdi usbserial_usbdebug \
- video xfs \
-"
+ video \
+ xfs \
+)
+
+declare -a MODULES
+MODULES=(normal)
+
+mkmodlist() {
+    local mods="MODULES"
+    local -n mods
+    local mod
+    for mod in "${MODULE_CANDIDATES[@]}" ; do
+        if [[ -f grub-core/${mod}.mod ]] ; then
+            mods[${#mods[@]}]="${mod}"
+        else
+            echo "warning: ${mod}.mod not found"
+        fi
+    done
+}
 
 set -x
+mkmodlist
 # shellcheck disable=SC2086
-echo ./grub-mkimage ${verbose} -O ${grubarch}-efi -o grub${efiarch}.efi.orig "${dbgcfg[@]}" -p /EFI/${efidir} -d grub-core ${MODULES}
+echo ./grub-mkimage ${verbose} -O ${grubarch}-efi -o grub${efiarch}.efi.orig "${dbgcfg[@]}" -p /EFI/${efidir} -d grub-core "${MODULES[@]}"
 # shellcheck disable=SC2086
-./grub-mkimage ${verbose} -O ${grubarch}-efi -o grub${efiarch}.efi.orig "${dbgcfg[@]}" -p /EFI/${efidir} -d grub-core ${MODULES}
+./grub-mkimage ${verbose} -O ${grubarch}-efi -o grub${efiarch}.efi.orig "${dbgcfg[@]}" -p /EFI/${efidir} -d grub-core "${MODULES[@]}"
 echo pesign -f -i grub${efiarch}.efi.orig -o grub${efiarch}.efi -c 'Red Hat Test Certificate' -n /etc/pki/pesign-rh-test/ -s
 pesign -f -i grub${efiarch}.efi.orig -o grub${efiarch}.efi -c 'Red Hat Test Certificate' -n /etc/pki/pesign-rh-test/ -s
 if [[ "${annobin}" -eq 0 ]] ; then
