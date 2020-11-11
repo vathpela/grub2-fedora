@@ -9,6 +9,10 @@ CPP=$(TARGET_CC)
 CCAS=$(TARGET_CC)
 RANLIB=$(TARGET_RANLIB)
 STRIP=$(TARGET_STRIP)
+# XXX FIXME this should come from configure
+# WINDRES=$(TARGET_WINDRES)
+WINDRES=x86_64-w64-mingw32-windres
+MINGWOBJCOPY=x86_64-w64-mingw32-objcopy
 
 MACHO2IMG=$(top_builddir)/grub-macho2img
 
@@ -47,6 +51,15 @@ CLEANFILES += build-grub-module-verifier$(BUILD_EXEEXT)
 trigtables.c: gentrigtables$(BUILD_EXEEXT) gentrigtables.c $(top_srcdir)/configure.ac
 	./gentrigtables$(BUILD_EXEEXT) > $@
 CLEANFILES += trigtables.c
+
+sbat.exe : $(top_srcdir)/grub-core/kern/efi/sbat.arc
+	$(WINDRES) -i $< -o $@ -Jrc -Ocoff
+sbat.rc : $(top_srcdir)/grub-core/kern/efi/sbat.arc
+	$(WINDRES) -i $< -o $@ -Jrc -Ores
+sbat.res : sbat.exe
+	$(MINGWOBJCOPY) -Obinary -j .rsrc $^ $@
+
+CLEANFILES += sbat.exe sbat.res
 
 # XXX Use Automake's LEX & YACC support
 grub_script.tab.h: script/parser.y
