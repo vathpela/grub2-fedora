@@ -826,12 +826,22 @@ init_pe_section(const struct grub_install_image_target_desc *image_target,
 {
   strcpy (section->name, name);
 
+  grub_util_info("\"%s\" raw_data:0x%lx vma:0x%lx sz:0x%lx", name, (unsigned long)*rda, (unsigned long)*vma, (unsigned long)rsz);
+
   section->virtual_address = grub_host_to_target32 (*vma);
   section->virtual_size = grub_host_to_target32 (vsz);
+  grub_util_info("*vma+vsz:0x%lx ALIGN_UP(*vma+vsz, 0x%lx):0x%lx",
+		 (unsigned long)*vma + vsz,
+		 (unsigned long)valign,
+		 (unsigned long)ALIGN_UP(*vma+vsz, valign));
   (*vma) = ALIGN_UP(*vma + vsz, valign);
 
   section->raw_data_offset = grub_host_to_target32 (*rda);
   section->raw_data_size = grub_host_to_target32 (rsz);
+  grub_util_info("*rda+rsz:0x%lx ALIGN_UP(*rda+rsz, 0x%lx):0x%lx",
+		 (unsigned long)*rda + rsz,
+		 (unsigned long)GRUB_PE32_FILE_ALIGNMENT,
+		 (unsigned long)ALIGN_UP(*rda+rsz, GRUB_PE32_FILE_ALIGNMENT));
   (*rda) = ALIGN_UP(*rda + rsz, GRUB_PE32_FILE_ALIGNMENT);
 
   section->characteristics = grub_host_to_target32 (characteristics);
@@ -890,6 +900,7 @@ grub_install_generate_image (const char *dir, const char *prefix,
   else
     total_module_size = sizeof (struct grub_module_info32);
 
+  grub_util_info("total_module_size <- 0x%lx", total_module_size);
   {
     size_t i;
     for (i = 0; i < npubkeys; i++)
@@ -900,6 +911,7 @@ grub_install_generate_image (const char *dir, const char *prefix,
 			GRUB_HOST_PRIxLONG_LONG,
 			(unsigned) i, (unsigned long long) curs);
 	total_module_size += curs + sizeof (struct grub_module_header);
+	grub_util_info("total_module_size <- 0x%lx", total_module_size);
       }
   }
 
@@ -909,12 +921,14 @@ grub_install_generate_image (const char *dir, const char *prefix,
       grub_util_info ("the size of memory disk is 0x%" GRUB_HOST_PRIxLONG_LONG,
 		      (unsigned long long) memdisk_size);
       total_module_size += memdisk_size + sizeof (struct grub_module_header);
+      grub_util_info("total_module_size <- 0x%lx", total_module_size);
     }
 
   if (dtb_path)
     {
       dtb_size = ALIGN_ADDR(grub_util_get_image_size (dtb_path));
       total_module_size += dtb_size + sizeof (struct grub_module_header);
+      grub_util_info("total_module_size <- 0x%lx", total_module_size);
     }
 
   if (config_path)
@@ -923,17 +937,22 @@ grub_install_generate_image (const char *dir, const char *prefix,
       grub_util_info ("the size of config file is 0x%" GRUB_HOST_PRIxLONG_LONG,
 		      (unsigned long long) config_size);
       total_module_size += config_size + sizeof (struct grub_module_header);
+      grub_util_info("total_module_size <- 0x%lx", total_module_size);
     }
 
   if (prefix)
     {
       prefix_size = ALIGN_ADDR (strlen (prefix) + 1);
       total_module_size += prefix_size + sizeof (struct grub_module_header);
+      grub_util_info("total_module_size <- 0x%lx", total_module_size);
     }
 
   for (p = path_list; p; p = p->next)
-    total_module_size += (ALIGN_ADDR (grub_util_get_image_size (p->name))
-			  + sizeof (struct grub_module_header));
+    {
+      total_module_size += (ALIGN_ADDR (grub_util_get_image_size (p->name))
+			    + sizeof (struct grub_module_header));
+      grub_util_info("total_module_size <- 0x%lx", total_module_size);
+    }
 
   grub_util_info ("the total module size is 0x%" GRUB_HOST_PRIxLONG_LONG,
 		  (unsigned long long) total_module_size);
@@ -1302,16 +1321,69 @@ grub_install_generate_image (const char *dir, const char *prefix,
 
 	if (rsrc_path != NULL)
 	  {
+	    grub_util_info("rsrc_path:\"%s\"", rsrc_path);
 	    if (image_target->id != IMAGE_EFI)
 	      grub_util_error (_("rsrc section can only be embedded in EFI images."));
 
 	    rsrc_size = ALIGN_ADDR(grub_util_get_image_size (rsrc_path));
+	    grub_util_info("rsrc_size:0x%lx", rsrc_size);
+#if 0
+	    grub_util_info("tab_size+rsrc_size:0x%lx ALIGN_UP(tab_size+rsrc_size, 0x%lx):0x%lx",
+			   sizeof(struct grub_pe32_rsrc_table) + rsrc_size,
+			   (unsigned long)GRUB_PE32_FILE_ALIGNMENT,
+			   (unsigned long)ALIGN_UP(sizeof(struct grub_pe32_rsrc_table) + rsrc_size,
+						   GRUB_PE32_FILE_ALIGNMENT));
+#else
+	    grub_util_info("rsrc_size:0x%lx ALIGN_UP(rsrc_size, 0x%lx):0x%lx",
+			   (unsigned long)rsrc_size,
+			   (unsigned long)GRUB_PE32_FILE_ALIGNMENT,
+			   (unsigned long)ALIGN_UP(rsrc_size, GRUB_PE32_FILE_ALIGNMENT));
+#endif
 	  }
 
+	grub_util_info("header_size:0x%lx core_size:0x%lx", header_size, core_size);
+	grub_util_info("hdr+core:0x%lx ALIGN_UP(hdr+core, 0x%lx):0x%lx",
+		       (unsigned long)header_size + core_size,
+		       (unsigned long)GRUB_PE32_FILE_ALIGNMENT,
+		       (unsigned long)ALIGN_UP(header_size + core_size, GRUB_PE32_FILE_ALIGNMENT));
+	grub_util_info("reloc_size:0x%lx ALIGN_UP(reloc_size, 0x%lx):0x%lx",
+		       (unsigned long)layout.reloc_size,
+		       (unsigned long)GRUB_PE32_FILE_ALIGNMENT,
+		       (unsigned long)ALIGN_UP(layout.reloc_size, GRUB_PE32_FILE_ALIGNMENT));
+#if 0
+	grub_util_info("tab_size+rsrc_size:0x%lx ALIGN_UP(tab_size+rsrc_size, 0x%lx):0x%lx",
+		       (unsigned long)sizeof (struct grub_pe32_rsrc_table) + rsrc_size,
+		       (unsigned long)GRUB_PE32_FILE_ALIGNMENT,
+		       (unsigned long)ALIGN_UP(sizeof (struct grub_pe32_rsrc_table) + rsrc_size, GRUB_PE32_FILE_ALIGNMENT));
+#else
+	grub_util_info("rsrc_size:0x%lx ALIGN_UP(rsrc_size, 0x%lx):0x%lx",
+		       (unsigned long)rsrc_size,
+		       (unsigned long)GRUB_PE32_FILE_ALIGNMENT,
+		       (unsigned long)ALIGN_UP(rsrc_size, GRUB_PE32_FILE_ALIGNMENT));
+#endif
 	pe_size = ALIGN_UP (header_size + core_size, GRUB_PE32_FILE_ALIGNMENT)
 		  + ALIGN_UP (layout.reloc_size, GRUB_PE32_FILE_ALIGNMENT);
+#if 0
+	if (rsrc_size)
+	  pe_size += ALIGN_UP(sizeof (struct grub_pe32_rsrc_table) + rsrc_size,
+			      GRUB_PE32_FILE_ALIGNMENT);
+	grub_util_info("pe_size = hdr 0x%lx + core 0x%lx + h+c align 0x%lx + reloc 0x%lx + rsrc 0x%lx = 0x%lx",
+		       header_size, core_size,
+		       ALIGN_UP (header_size + core_size, GRUB_PE32_FILE_ALIGNMENT) - (header_size + core_size),
+		       ALIGN_UP (layout.reloc_size, GRUB_PE32_FILE_ALIGNMENT),
+		       rsrc_size ? ALIGN_UP(sizeof (struct grub_pe32_rsrc_table) + rsrc_size,
+					    GRUB_PE32_FILE_ALIGNMENT) : 0,
+		       pe_size);
+#else
 	if (rsrc_size)
 	  pe_size += ALIGN_UP(rsrc_size, GRUB_PE32_FILE_ALIGNMENT);
+	grub_util_info("pe_size = hdr 0x%lx + core 0x%lx + h+c align 0x%lx + reloc 0x%lx + rsrc 0x%lx = 0x%lx",
+		       header_size, core_size,
+		       ALIGN_UP (header_size + core_size, GRUB_PE32_FILE_ALIGNMENT) - (header_size + core_size),
+		       ALIGN_UP (layout.reloc_size, GRUB_PE32_FILE_ALIGNMENT),
+		       rsrc_size ? ALIGN_UP(rsrc_size, GRUB_PE32_FILE_ALIGNMENT) : 0,
+		       pe_size);
+#endif
 
 	header = pe_img = xcalloc (1, pe_size);
 	vma = raw_data = header_size;
@@ -1433,10 +1505,21 @@ grub_install_generate_image (const char *dir, const char *prefix,
 				   | 0x80);
 #endif
 
+#if 0
+	scn_size = pe_size
+		   - layout.reloc_size
+		   - ALIGN_UP(sizeof(struct grub_pe32_rsrc_table) + rsrc_size, GRUB_PE32_FILE_ALIGNMENT)
+		   - raw_data;
+#else
 	scn_size = pe_size
 		   - layout.reloc_size
 		   - ALIGN_UP(rsrc_size, GRUB_PE32_FILE_ALIGNMENT)
 		   - raw_data;
+#endif
+	grub_util_info("mods scn_size:pe_size 0x%lx - reloc_size 0x%lx - rsrc_size 0x%lx - raw_data 0x%lx = 0x%lx",
+		       pe_size, layout.reloc_size,
+		       ALIGN_UP(rsrc_size, GRUB_PE32_FILE_ALIGNMENT),
+		       (unsigned long)raw_data, scn_size);
 	section = init_pe_section (image_target, section, "mods",
 				   &vma, scn_size, image_target->section_align,
 				   &raw_data, scn_size,
@@ -1444,16 +1527,46 @@ grub_install_generate_image (const char *dir, const char *prefix,
 				   | GRUB_PE32_SCN_MEM_READ
 				   | GRUB_PE32_SCN_MEM_WRITE);
 
+	grub_util_info ("exec_size:0x%lx kernel_size:0x%lx",
+			layout.exec_size, layout.kernel_size);
+	grub_util_info ("bss_size:0x%lx start_address:0x%lx",
+			layout.bss_size, layout.start_address);
+	grub_util_info ("reloc_section:%p reloc_size:0x%lx",
+			layout.reloc_section, layout.reloc_size);
+	grub_util_info ("align:0x%lx bss_start:0x%lx",
+			layout.align, (unsigned long)layout.bss_start);
+	grub_util_info ("end:0x%lx pe_size:0x%lx",
+			(unsigned long)layout.end, pe_size);
+	grub_util_info ("vma:0x%lx raw_data:0x%lx",
+			(unsigned long)vma, (unsigned long)raw_data);
+
 	if (rsrc_path)
 	  {
+#if 0
+	    struct grub_pe32_rsrc_table *rsrc_table;
+	    grub_uint32_t hdr_size = sizeof(*rsrc_table);
+
+	    rsrc_table = (void *)(pe_img + raw_data);
+	    memset(rsrc_table, 0, sizeof(*rsrc_table));
+	    scn_size = rsrc_size + hdr_size;
+	    grub_util_info("hdr_size:0x%lx", (unsigned long)hdr_size);
+	    grub_util_info("scn_size:0x%lx", scn_size);
+
+	    rsrc_table->n_names = 4;
+	    rsrc_table->n_ids = 1;
+
+#else
 	    grub_uint32_t hdr_size = 0;
 	    scn_size = rsrc_size;
+#endif
 
 	    grub_util_load_image (rsrc_path, (pe_img + raw_data + hdr_size));
 	    PE_OHDR(o32, o64, resource_table.rva) =
 					    grub_host_to_target32 (raw_data);
 	    PE_OHDR(o32, o64, resource_table.size) =
 					    grub_host_to_target32 (scn_size);
+	    //scn_size = ALIGN_UP(scn_size, GRUB_PE32_FILE_ALIGNMENT);
+	    grub_util_info("scn_size:0x%lx", scn_size);
 	    section = init_pe_section (image_target, section, ".rsrc",
 				    &vma, scn_size,
 				    image_target->section_align,
