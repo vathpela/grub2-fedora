@@ -44,6 +44,9 @@ void grub_module_verify32(const char * const filename, void *module_img, size_t 
 void grub_image_verify64(const char * const filename, void *img, size_t size, const struct grub_module_verifier_arch *arch, const char **whitelist_empty);
 void grub_image_verify32(const char * const filename, void *img, size_t size, const struct grub_module_verifier_arch *arch, const char **whitelist_empty);
 
+#ifdef ELF_ST_TYPE
+#undef ELF_ST_TYPE
+#endif
 #if defined(MODULEVERIFIER_ELF32) || defined(IMAGEVERIFIER_ELF32)
 # define SUFFIX(x)	x ## 32
 # define ELFCLASSXX	ELFCLASS32

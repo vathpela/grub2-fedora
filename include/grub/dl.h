@@ -38,6 +38,11 @@
 
 #ifndef GRUB_MOD_INIT
 
+#ifdef GRUB_UTIL
+#define GRUB_TARGET_CPU "powerpc"
+#define GRUB_PLATFORM "ieee1275"
+#endif
+
 #if !defined (GRUB_UTIL) && !defined (GRUB_MACHINE_EMU) && !defined (GRUB_KERNEL)
 
 #define GRUB_MOD_INIT(name)	\
@@ -312,6 +317,16 @@ grub_dl_is_persistent (grub_dl_t mod)
   return mod->persistent;
 }
 
+#else /* GRUB_UTIL */
+
+static inline void
+grub_dl_init (grub_dl_t mod)
+{
+  *GRUB_DL_NEXT(mod) = grub_dl_head;
+  grub_dl_head = mod;
+}
+
+
 #endif /* GRUB_UTIL */
 
 static inline grub_dl_t
@@ -336,6 +351,13 @@ grub_err_t grub_arch_dl_check_header (void *ehdr);
 grub_err_t
 grub_arch_dl_relocate_symbols (grub_dl_t mod, void *ehdr,
 			       Elf_Shdr *s, grub_dl_segment_t seg);
+#else
+static inline grub_err_t
+grub_arch_dl_relocate_symbols (grub_dl_t mod, void *ehdr,
+			       Elf_Shdr *s, grub_dl_segment_t seg)
+{
+  return 0;
+}
 #endif
 
 #if defined (_mips)

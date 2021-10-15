@@ -17,6 +17,8 @@
  *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define GRUB_TARGET_WORDSIZE 64
+
 #include <config.h>
 #include <grub/types.h>
 #include <grub/elf.h>
@@ -49,6 +51,11 @@
 #include <grub/module_verifier.h>
 
 #define _GNU_SOURCE	1
+
+grub_err_t grub_arch_dl_check_header (void *ehdr)
+{
+  return 0;
+}
 
 #pragma GCC diagnostic ignored "-Wmissing-prototypes"
 #pragma GCC diagnostic ignored "-Wmissing-declarations"

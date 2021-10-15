@@ -34,7 +34,9 @@ void *EXPORT_FUNC(grub_malloc) (grub_size_t size);
 void *EXPORT_FUNC(grub_zalloc) (grub_size_t size);
 void EXPORT_FUNC(grub_free) (void *ptr);
 void *EXPORT_FUNC(grub_realloc) (void *ptr, grub_size_t size);
-#ifndef GRUB_MACHINE_EMU
+#ifdef GRUB_UTIL
+#define grub_memalign(a, s) aligned_alloc(a, s)
+#elif !defined(GRUB_MACHINE_EMU)
 void *EXPORT_FUNC(grub_memalign) (grub_size_t align, grub_size_t size);
 #endif
 
