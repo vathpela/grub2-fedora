@@ -553,7 +553,7 @@ AC_SUBST(BUILD_SHEBANG)
 gl_INIT
 
 WARN_FLAGS="-Wall -W -Wshadow -Wpointer-arith -Wundef -Wchar-subscripts -Wcomment -Wdeprecated-declarations -Wdisabled-optimization -Wdiv-by-zero -Wfloat-equal -Wformat-extra-args -Wformat-security -Wformat-y2k -Wimplicit -Wimplicit-function-declaration -Wimplicit-int -Wmain -Wmissing-braces -Wmissing-format-attribute -Wmultichar -Wparentheses -Wreturn-type -Wsequence-point -Wshadow -Wsign-compare -Wswitch -Wtrigraphs -Wunknown-pragmas -Wunused -Wunused-function -Wunused-label -Wunused-parameter -Wunused-value  -Wunused-variable -Wwrite-strings -Wnested-externs -Wstrict-prototypes"
-EXTRA_WARN_FLAGS="-Wextra -Wattributes -Wendif-labels -Winit-self -Wint-to-pointer-cast -Winvalid-pch -Wmissing-field-initializers -Wnonnull -Woverflow -Wvla -Wpointer-to-int-cast -Wstrict-aliasing -Wvariadic-macros -Wvolatile-register-var -Wpointer-sign -Wmissing-include-dirs -Wmissing-prototypes -Wmissing-declarations -Wformat=2"
+EXTRA_WARN_FLAGS="-Wextra -Wattributes -Wendif-labels -Winit-self -Wint-to-pointer-cast -Winvalid-pch -Wno-missing-field-initializers -Wnonnull -Woverflow -Wvla -Wpointer-to-int-cast -Wstrict-aliasing -Wvariadic-macros -Wvolatile-register-var -Wpointer-sign -Wmissing-include-dirs -Wmissing-prototypes -Wmissing-declarations -Wformat=2"
 
 HOST_CFLAGS="$HOST_CFLAGS $WARN_FLAGS -Wcast-align"
 
@@ -652,26 +652,6 @@ TARGET_CFLAGS="$TARGET_CFLAGS -Wcast-align"
 fi
 
 TARGET_CC_VERSION="$(LC_ALL=C $TARGET_CC --version | head -n1)"
-
-AC_CACHE_CHECK([which extra warnings work], [grub_cv_target_cc_w_extra_flags], [
-  LDFLAGS="$TARGET_LDFLAGS -nostdlib -static"
-
-  grub_cv_target_cc_w_extra_flags=
-  for x in $EXTRA_WARN_FLAGS; do
-      CFLAGS="$TARGET_CFLAGS $x -Werror"
-      AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-asm (".globl start; start:");
-void __main (void);
-void __main (void) {}
-int main (void);
-]], [[]])], [flag=1], [flag=0])
-      if test x$flag = x1 ; then
-         grub_cv_target_cc_w_extra_flags="$grub_cv_target_cc_w_extra_flags $x"
-      fi
-  done
-])
-
-TARGET_CFLAGS="$TARGET_CFLAGS $grub_cv_target_cc_w_extra_flags"
 
 AC_CACHE_CHECK([if compiling with clang], [grub_cv_cc_target_clang],
 [

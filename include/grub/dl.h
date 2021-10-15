@@ -173,6 +173,13 @@ struct grub_dl_dep
 typedef struct grub_dl_dep *grub_dl_dep_t;
 
 #ifndef GRUB_UTIL
+#if !defined (__i386__) && !defined (__x86_64__)
+#define GRUB_DL_NEXT(dl) (&((dl)->x86.next))
+#elif defined __mips__
+#define GRUB_DL_NEXT(dl) (&((dl)->mips.next))
+#else
+#define GRUB_DL_NEXT(dl) (&((dl)->next))
+#endif
 struct grub_dl
 {
   char *name;
@@ -197,6 +204,55 @@ struct grub_dl
   grub_size_t sz;
   struct grub_dl *next;
 };
+#else /* GRUB_UTIL */
+struct grub_dl
+{
+  char *name;
+  int ref_count;
+  int persistent;
+  grub_dl_dep_t dep;
+  grub_dl_segment_t segment;
+  Elf_Sym *symtab;
+  grub_size_t symsize;
+  void (*init) (struct grub_dl *mod);
+  void (*fini) (void);
+  union
+    {
+      /* x86 / x64 */
+      struct
+	{
+	  void *got;
+	  void *gotptr;
+	  void *tramp;
+	  void *trampptr;
+	  void *base;
+	  grub_size_t sz;
+	  struct grub_dl *next;
+	} x86;
+      /* mips */
+      struct
+	{
+	  grub_uint32_t *reginfo;
+	  void *base;
+	  grub_size_t sz;
+	  struct grub_dl *next;
+	} mips;
+      /* everything else */
+      struct
+	{
+	  void *base;
+	  grub_size_t sz;
+	  struct grub_dl *next;
+	};
+    };
+};
+
+static inline struct grub_dl **
+GRUB_DL_NEXT(struct grub_dl *dl)
+{
+  /* XXX THIS IS VERY WRONG */
+  return &dl->next;
+}
 #endif
 typedef struct grub_dl *grub_dl_t;
 
@@ -212,9 +268,9 @@ extern int EXPORT_FUNC(grub_dl_ref_count) (grub_dl_t mod);
 
 extern grub_dl_t EXPORT_VAR(grub_dl_head);
 
-#ifndef GRUB_UTIL
-
 #define FOR_DL_MODULES(var) FOR_LIST_ELEMENTS ((var), (grub_dl_head))
+
+#ifndef GRUB_UTIL
 
 #ifdef GRUB_MACHINE_EMU
 void *
@@ -231,18 +287,6 @@ grub_dl_init (grub_dl_t mod)
 
   mod->next = grub_dl_head;
   grub_dl_head = mod;
-}
-
-static inline grub_dl_t
-grub_dl_get (const char *name)
-{
-  grub_dl_t l;
-
-  FOR_DL_MODULES(l)
-    if (grub_strcmp (name, l->name) == 0)
-      return l;
-
-  return 0;
 }
 
 #ifdef GRUB_MACHINE_EMU
@@ -268,7 +312,19 @@ grub_dl_is_persistent (grub_dl_t mod)
   return mod->persistent;
 }
 
-#endif
+#endif /* GRUB_UTIL */
+
+static inline grub_dl_t
+grub_dl_get (const char *name)
+{
+  grub_dl_t l;
+
+  FOR_DL_MODULES(l)
+    if (grub_strcmp (name, l->name) == 0)
+      return l;
+
+  return 0;
+}
 
 void * EXPORT_FUNC(grub_resolve_symbol) (const char *name);
 const char * EXPORT_FUNC(grub_get_symbol_by_addr) (const void *addr, int isfunc);

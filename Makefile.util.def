@@ -26,6 +26,7 @@ library = {
   common = grub-core/osdep/exec.c;
   common = grub-core/osdep/sleep.c;
   common = grub-core/osdep/password.c;
+  common = grub-core/kern/dl.c;
   common = grub-core/kern/emu/misc.c;
   common = grub-core/kern/emu/mm.c;
   common = grub-core/kern/env.c;
@@ -202,6 +203,32 @@ program = {
   common = util/config.c;
 
   extra_dist = util/grub-mkimagexx.c;
+
+  ldadd = libgrubmods.a;
+  ldadd = libgrubgcry.a;
+  ldadd = libgrubkern.a;
+  ldadd = grub-core/lib/gnulib/libgnu.a;
+  ldadd = '$(LIBLZMA)';
+  ldadd = '$(LIBINTL) $(LIBDEVMAPPER) $(LIBZFS) $(LIBNVPAIR) $(LIBGEOM)';
+};
+
+program = {
+  name = grub-image-verifier;
+  mansection = 1;
+
+  common = util/grub-image-verifier.c;
+  common = util/grub-image-verifier32.c;
+  common = util/grub-image-verifier64.c;
+  common = util/resolve.c;
+  common = grub-core/kern/emu/argp_common.c;
+  common = grub-core/osdep/init.c;
+  common = grub-core/osdep/config.c;
+  extra_dist = grub-core/osdep/aros/config.c;
+  extra_dist = grub-core/osdep/windows/config.c;
+  extra_dist = grub-core/osdep/unix/config.c;
+  common = util/config.c;
+
+  extra_dist = util/grub-image-verifierXX.c;
 
   ldadd = libgrubmods.a;
   ldadd = libgrubgcry.a;

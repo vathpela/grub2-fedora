@@ -72,10 +72,10 @@ grub_dl_remove (grub_dl_t mod)
 {
   grub_dl_t *p, q;
 
-  for (p = &grub_dl_head, q = *p; q; p = &q->next, q = *p)
+  for (p = &grub_dl_head, q = *p; q; p = GRUB_DL_NEXT(q), q = *p)
     if (q == mod)
       {
-	*p = q->next;
+	*p = *GRUB_DL_NEXT(q);
 	return;
       }
 }
