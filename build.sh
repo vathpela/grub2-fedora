@@ -7,41 +7,81 @@
 #
 set -eu
 
-annobin=1
+export PS4='${LINENO}: '
+
+annobin=yes
 arch=x64
-autogen=0 || :
+autogen=no
+bear=no
 blscfg="blscfg"
 ccache="" || :
-CFLAGS=() || :
-clean=0 || :
-clean_set=0 || :
-configure=0 || :
+CFLAGS_PRE=(
+            -fno-strict-aliasing
+            -fstack-clash-protection
+            -g3
+            -grecord-gcc-switches
+            -pipe
+            "-Wp,-D_GLIBCXX_ASSERTIONS"
+        )
+DISTRO_CFLAGS_PRE=() || :
+W_CFLAGS=(
+          -Wno-unused-parameter
+          -Wno-unused-variable
+          -Wall
+          -Wextra
+      )
+CFLAGS_POST=(-Wno-error=format-nonliteral)
+DISTRO_CFLAGS_POST=() || :
+clean=no
+clean_set=no
+configure=no
+declare -a configargs
+configargs=()
+DASHX=""
+declare -a dbgcfg
 dbgcfg=()
 efiarch=x64
 efidir=BOOT
-eject=0
-gnulib_url="https://github.com/vathpela/gnulib.git"
-gnulib_revision="gcc-warnings"
+eject=no
+gnulib_url="https://github.com/rhboot/gnulib.git"
+gnulib_revision="fixes"
 upstream_gnulib="no"
+upstream="no"
 grubarch=x64
 harden="yes" || :
 host="" || :
 instfile=grub${efiarch}.efi
-inst=0
+inst=no
 mountpoint=/run/media/pjones/6DE3-F128
+declare -a smp_flags
+smp_flags=(-j)
+paths=(
+       --bindir=/usr/bin
+       --datadir=/usr/share
+       --exec-prefix=/usr
+       --includedir=/usr/include
+       --infodir=/usr/share/info
+       --localstatedir=/var
+       --libdir=/usr/lib
+       --libexecdir=/usr/libexec
+       --mandir=/usr/share/man
+       --prefix=/usr
+       --sbindir=/usr/sbin
+       --sharedstatedir=/var/lib
+       --sysconfdir=/etc
+   )
 pie=()
 platform=efi
-pubhtml=0
-scp=0 || :
+pubhtml=no
+scp=no
 scphost=10.20.1.111
-std=() || :
+std=(-std=gnu99) || :
 target="" || :
-unwind=(--enable-eh-frame --enable-unwind-tables --enable-async-unwind-tables)
-werror=() || :
+unwind=()
+with_werror=yes
 verbose="" || :
-scan=0
+scan="no"
 MAKE="make"
-DISTRO_CFLAGS=() || :
 deploysh="" || :
 declare -a enables
 enables=() || :
@@ -62,8 +102,9 @@ usage() {
         echo "             [--platform PLATFORM] [--scrub] [--scrub-objs] \\"
         echo "             [--ccache|--no-ccache] [--verbose] [--scan] \\"
         echo "             [--upstream-gnulib|--no-upstream-gnulib] \\"
+        echo "             [--no-parallel-make] \\"
         echo "             [--deploy DEPLOYSCRIPT] [--hostutils] \\"
-        echo "             [--enable-FOO] [--disable-FOO]"
+        echo "             [--enable-FOO] [--disable-FOO] "
     ) >> "${out}"
     exit "${status}"
 }
@@ -71,10 +112,10 @@ usage() {
 while [[ $# -gt 0 ]]; do
     case " ${1} " in
         " --annobin ")
-            annobin=1
+            annobin=yes
             ;;
         " --no-annobin ")
-            annobin=0 || :
+            annobin=no
             ;;
         " --arch ")
             arch=${2}
@@ -84,16 +125,27 @@ while [[ $# -gt 0 ]]; do
             arch="${1:7}"
             ;;
         " --autogen ")
-            autogen=1
+            autogen=yes
             ;;
         " --no-autogen ")
-            autogen=0
+            autogen=no
+            ;;
+        " --bear ")
+            bear=yes
+            ;;
+        " --no-bear ")
+            bear=no
             ;;
         " --blscfg ")
             blscfg="blscfg"
             ;;
         " --no-blscfg ")
             blscfg="" || :
+            ;;
+        " --clang ")
+            HOST_CC=clang
+            TARGET_CC=clang
+            BUILD_CC=clang
             ;;
         " --ccache "|" --with=ccache "|" --with-ccache ")
             ccache=yes
@@ -102,18 +154,18 @@ while [[ $# -gt 0 ]]; do
             ccache=""
             ;;
         " --configure ")
-            configure=1
+            configure=yes
             ;;
         " --no-configure ")
-            configure=0 || :
+            configure=no
             ;;
         " --clean ")
-            clean_set=1
-            clean=1
+            clean_set=yes
+            clean=yes
             ;;
         " --no-clean ")
-            clean_set=1
-            clean=0 || :
+            clean_set=yes
+            clean=no
             ;;
         " --deploy ")
             deploysh="${2}"
@@ -123,7 +175,7 @@ while [[ $# -gt 0 ]]; do
             deploysh="${1:9}"
             ;;
         " --debugcfg ")
-            dbgcfg=("-c" "grubgdb.cfg")
+            dbgcfg=("-c" "../../debug.cfg")
             ;;
         " --debugcfg="*)
             dbgcfg=("-c" "${1:11}")
@@ -135,10 +187,10 @@ while [[ $# -gt 0 ]]; do
             enables[${#enables[@]}]="${1}"
             ;;
         " --eject ")
-            eject=1
+            eject=yes
             ;;
         " --no-eject ")
-            eject=0
+            eject=no
             ;;
         " --ejectdev ")
             ejectdev="${2}"
@@ -178,10 +230,13 @@ while [[ $# -gt 0 ]]; do
             hostutils=(--with-utils=host)
             ;;
         " --install ")
-            inst=1
+            inst=yes
             ;;
         " --no-inst ")
-            inst=0
+            inst=no
+            ;;
+        " --no-parallel-make ")
+            smp_flags=() || :
             ;;
         " --pie ")
             pie=("${2}")
@@ -198,19 +253,25 @@ while [[ $# -gt 0 ]]; do
             platform=${1:11}
             ;;
         " --pubhtml ")
-            pubhtml=1
+            pubhtml=yes
+            ;;
+        " --no-pubhtml ")
+            pubhtml=no
             ;;
         " --scan ")
-            scan=1
+            scan="yes"
+            HOST_CC=clang
+            BUILD_CC=clang
+            TARGET_CC=clang
             ;;
         " --no-scan ")
-            scan=0
+            scan="no"
             ;;
         " --scp ")
-            scp=1
+            scp=yes
             ;;
         " --no-scp ")
-            scp=0
+            scp=no
             ;;
         " --scphost ")
             scphost="${2}"
@@ -220,7 +281,7 @@ while [[ $# -gt 0 ]]; do
             scphost="${1:7}"
             ;;
         " --scp-host ")
-            scp-host="${2}"
+            scphost="${2}"
             shift
             ;;
         " --scp-host="*)
@@ -235,12 +296,15 @@ while [[ $# -gt 0 ]]; do
         " --scrub-o"*" ")
             find . '(' -iname '*.[oa138]' -o -iname '*.mod' -o -iname '*.module' -o -iname '*.img' -o -iname '*.exec' -o -iname '.dirstamp' -o -iname '*.marker' -o -iname '*.lst' ')' -exec rm -vf {} \;
             ;;
-        " --std ")
+        " --std "|" -std ")
             std=("-std=$2")
             shift
             ;;
         " --std="*)
-            std=("${1}")
+            std=("${1:6}")
+            ;;
+        " -std="*)
+            std=("${1:5}")
             ;;
         " --target ")
             target="${2}"
@@ -249,21 +313,44 @@ while [[ $# -gt 0 ]]; do
         " --target="*)
             target="${1:9}"
             ;;
+        " --trace ")
+            DASHX="-x"
+            ;;
+        " --no-trace ")
+            DASHX=""
+            ;;
         " --upstream-gnulib ")
             upstream_gnulib="yes"
             ;;
         " --no-upstream-gnulib ")
             upstream_gnulib="no"
             ;;
+        " --upstream ")
+            shift
+            upstream="yes"
+            set -- --upstream --disable-werror --no-annobin --upstream-gnulib --no-blscfg --no-unwind --no-harden --pie=--no-pie "${@}"
+            ;;
         " --no-werror ")
-            werror=(--disable-werror)
+            with_werror=no
             ;;
         " --werror ")
-            werror=()
-            CFLAGS=(-Werror "${CFLAGS[@]}")
+            with_werror=yes
             ;;
         " --rhel7 "|" --rhel-7 ")
-            DISTRO_CFLAGS=(-Wno-error=implicit-fallthrough -Wno-error=address-of-packed-member -Wno-error=pointer-sign -Wno-pointer-sign -Wno-sign-compare -Wno-error=sign-compare)
+            DISTRO_CFLAGS_PRE=(
+                               -Wformat-security
+                               -Wno-pointer-sign
+                               -Wno-sign-compare
+                           )
+            DISTRO_CFLAGS_POST=(
+                                -Wno-error=address-of-packed-member
+                                -Wno-error=implicit-fallthrough
+                                -Wno-error=pointer-sign
+                                -Wno-error=sign-compare
+                            )
+            ;;
+        " --unwind ")
+            unwind=(--enable-eh-frame --enable-unwind-tables --enable-async-unwind-tables)
             ;;
         " --no-unwind ")
             unwind=() || :
@@ -279,6 +366,25 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+if [[ "${bear}" = yes ]] ; then
+    BUILD_CC=clang
+    HOST_CC=clang
+    TARGET_CC=clang
+    SCAN="bear --"
+    #configure=yes
+fi
+
+if [[ "${with_werror}" = yes ]] ; then
+    werror=(--enable-werror)
+    W_CFLAGS=("${W_CFLAGS[@]}" -Werror)
+else
+    werror=(--disable-werror)
+fi
+
+if [[ "${upstream}" == "no" ]] ; then
+    configargs[${#configargs[@]}]="--with-rpm-version=grub2-2.02-56.fc29"
+fi
+
 TARGET_CC=${TARGET_CC:-gcc}
 if [[ -z "${target}" ]] || [[ "${TARGET_CC}" = gcc ]] && [[ -n "${target}" ]] ; then
     if [[ -z "${target}" ]] ; then
@@ -289,6 +395,7 @@ if [[ -z "${target}" ]] || [[ "${TARGET_CC}" = gcc ]] && [[ -n "${target}" ]] ; 
     fi
 fi
 
+BUILD_CC=${BUILD_CC:-gcc}
 HOST_CC=${HOST_CC:-gcc}
 if [[ -z "${host}" ]] || [[ "$HOST_CC" = gcc ]] && [[ -n "${host}" ]] ; then
     if [[ -z "${host}" ]] ; then
@@ -298,6 +405,9 @@ if [[ -z "${host}" ]] || [[ "$HOST_CC" = gcc ]] && [[ -n "${host}" ]] ; then
         HOST_CC="${host}-gcc"
     fi
 fi
+
+host="${host:-x86_64-redhat-linux-gnu}"
+target="${target:-x86_64-redhat-linux-gnu}"
 
 case "$(uname -m | sed -e 's,i.86,i686,g' -e 's,arm.*,arm,g')" in
   x86_64)
@@ -334,7 +444,15 @@ case "${arch}" in
     efiarch=arm
     arch=arm
     compiler=${arch}-linux-gnu-gcc
-    target_arch_cflags=(-mabi=aapcs-linux -mno-unaligned-access -fno-common -ffixed-r9 -msoft-float -march=armv7-a -mtune=generic-armv7-a)
+    target_arch_cflags=(
+                        -ffixed-r9
+                        -fno-common
+                        -mabi=aapcs-linux
+                        -march=armv7-a
+                        -mno-unaligned-access
+                        -msoft-float
+                        -mtune=generic-armv7-a
+                    )
     ;;
   arm64|aa64|aarch64)
     grubarch=arm64
@@ -352,14 +470,36 @@ if [[ "${compiler}" = gcc ]] && [[ -f "/usr/bin/${target}-${compiler}" ]] ; then
     TARGET_CC="${target}-${compiler}"
 fi
 
+if [[ "${TARGET_CC}" != gcc ]] ; then
+    harden=no
+fi
+
+if [[ "${scan}" = yes ]] ; then
+    if [[ "${harden}" = yes ]] ; then
+        echo "Warning: disabling --harden for --scan"
+        harden=no
+    fi
+    if [[ "${annobin}" = yes ]] ; then
+        echo "Warning: disabling --annobin for --scan"
+        annobin=no
+    fi
+fi
+
 if [[ "${harden}" = yes ]] ; then
     hardened_cc=(-specs=/usr/lib/rpm/redhat/redhat-hardened-cc1)
-    # shellcheck disable=SC2054
-    hardened_ld=(-Wl,-z,relro -Wl,--as-needed -Wl,-z,now -specs=/usr/lib/rpm/redhat/redhat-hardened-ld)
+    hardened_ld=(\
+                 -specs=/usr/lib/rpm/redhat/redhat-hardened-ld
+             )
 else
     hardened_cc=() || :
     hardened_ld=() || :
 fi
+
+hardened_ld=("${hardened_ld[@]}"
+             "-Wl,--as-needed"
+             "-Wl,-z,now"
+             "-Wl,-z,relro"
+         )
 
 if [[ "${ccache}" = yes ]] ; then
     ccache=$(find /usr/lib*/ccache/ '(' -type f -o -type l ')' -a -iname "${target}-gcc" 2>/dev/null | head -1)
@@ -371,17 +511,26 @@ else
   instfile="grub${efiarch}.efi"
 fi
 
-if [[ ${clean_set} -lt 1 && ${configure} -gt 0 ]] ; then
-    clean=1
+if [[ ${clean_set} = yes ]] && [[ ${configure} = yes ]] ; then
+    clean=yes
 fi
 
-if [[ ${configure} -gt 0 ]] || [[ ! -e Makefile ]] ; then
-    declare annobin_str=()
-    if [[ ${annobin} -gt 0 ]]; then
+declare annobin_str=()
+if [[ ${configure} = yes ]] || [[ ! -e Makefile ]] ; then
+    if [[ ${annobin} = yes ]]; then
         annobin_str=(-specs=/usr/lib/rpm/redhat/redhat-annobin-cc1)
     fi
-    if [[ ${autogen} -gt 0 ]] || [[ ! -f ../configure ]] ; then
-        pushd ..
+    if [[ -f ../configure ]] ; then
+        CONFIGURE=../configure
+    elif [[ -f ./configure ]] ; then
+        CONFIGURE=./configure
+    fi
+    if [[ ${autogen} != "no" ]] || [[ -z "${CONFIGURE}" ]] ; then
+        if [[ -f configure.ac ]] || [[ -f configure.in ]] ; then
+            pushd .
+        else
+            pushd ..
+        fi
         if [[ -f bootstrap ]] ; then
             declare -a bootstrap_vars=()
             if [[ "${upstream_gnulib}" = "yes" ]] ; then
@@ -395,47 +544,53 @@ if [[ ${configure} -gt 0 ]] || [[ ! -e Makefile ]] ; then
             eval echo "${bootstrap_vars[@]}" PYTHON=python3 ./bootstrap
             eval "${bootstrap_vars[@]}" PYTHON=python3 ./bootstrap
         else
-            autoreconf -vi
+            autoreconf -vi || :
             autoconf
-            PYTHON=python3 ./autogen.sh
+            # shellcheck disable=SC2086
+            PYTHON=python3 bash ${DASHX} ./autogen.sh
         fi
         popd
+    fi
+    if [[ -f ../configure ]] ; then
+        CONFIGURE=../configure
+    elif [[ -f ./configure ]] ; then
+        CONFIGURE=./configure
     fi
     if [[ -f "${ccache}${HOST_CC}" ]] ; then
         HOST_CC="${ccache}${HOST_CC}"
     fi
     if [[ -f "${ccache}${TARGET_CC}" ]] ; then
-        TARGET_CC="${ccache}${TARGET_CC}"
+        TARGET_CC="${ccache}${TARGET_CC} ${pie[*]}"
     fi
+    CFLAGS=("${CFLAGS_PRE[@]}" "${DISTRO_CFLAGS_PRE[@]}" "${W_CFLAGS[@]}" "${CFLAGS_POST[@]}" "${DISTRO_CFLAGS_POST[@]}")
     HOST_CPPFLAGS=("-I$PWD")
-    # shellcheck disable=SC2054
-    HOST_CFLAGS=("${CFLAGS[@]}" "${std[@]}" "${annobin_str[@]}" -Og -g3 -fno-strict-aliasing -g -pipe -Wall -Wno-unused-parameter -Wno-unused-variable -Werror=format-security -Wp,-D_GLIBCXX_ASSERTIONS -grecord-gcc-switches "${host_arch_cflags[@]}" -fstack-clash-protection "${hardened_cc[@]}" -Wno-error=format-nonliteral "${pie[@]}" "${DISTRO_CFLAGS[@]}")
+    HOST_CFLAGS=(-Og "${CFLAGS[@]}" "${std[@]}" "${annobin_str[@]}" "${host_arch_cflags[@]}" "${hardened_cc[@]}" "${pie[@]}")
     HOST_LDFLAGS=("${hardened_ld[@]}")
     TARGET_CPPFLAGS=("-I$PWD")
-    # shellcheck disable=SC2054
-    TARGET_CFLAGS=(-Os -fno-strict-aliasing -g -pipe -Wall -Wno-unused-parameter -Wno-unused-variable -Werror=format-security -Wp,-D_GLIBCXX_ASSERTIONS -grecord-gcc-switches "${target_arch_cflags[@]}" -fstack-clash-protection -Wno-error=format-nonliteral "${pie[@]}" "${DISTRO_CFLAGS[@]}")
+    TARGET_CFLAGS=(-Os "${target_arch_cflags[@]}" "${pie[@]}")
     if [[ "${harden}" == yes ]] ; then
-        # shellcheck disable=SC2054
-        TARGET_LDFLAGS=(-Wl,-z,relro -Wl,--as-needed -static)
+        TARGET_LDFLAGS=("-Wl,-z,relro" "-Wl,--as-needed" -static)
     else
-        # shellcheck disable=SC2054
-        TARGET_LDFLAGS=(-Wl,--as-needed -static)
+        TARGET_LDFLAGS=("-Wl,--as-needed" -static)
     fi
 
-    TARGETSTUFF=("HOST_CC=${HOST_CC}" \
-                 "HOST_CFLAGS=${HOST_CFLAGS[*]}" \
-                 "HOST_CPPFLAGS=${HOST_CPPFLAGS[*]}" \
-                 "HOST_LDFLAGS=${HOST_LDFLAGS[*]}" \
-                 "TARGET_CC=${TARGET_CC}" \
-                 "TARGET_CFLAGS=${TARGET_CFLAGS[*]}" \
-                 "TARGET_CPPFLAGS=${TARGET_CPPFLAGS[*]}" \
-                 "TARGET_LDFLAGS=${TARGET_LDFLAGS[*]}" \
+    TARGETSTUFF=("BUILD_CC=${BUILD_CC}"
+                 "CC=${BUILD_CC} ${pie[@]}"
+                 "HOST_CC=${HOST_CC}"
+                 "HOST_CFLAGS=${HOST_CFLAGS[*]}"
+                 "HOST_CPPFLAGS=${HOST_CPPFLAGS[*]}"
+                 "HOST_LDFLAGS=${HOST_LDFLAGS[*]}"
+                 "TARGET_CC=${TARGET_CC}"
+                 "TARGET_CFLAGS=${TARGET_CFLAGS[*]}"
+                 "TARGET_CPPFLAGS=${TARGET_CPPFLAGS[*]}"
+                 "TARGET_LDFLAGS=${TARGET_LDFLAGS[*]}"
              )
-
-    echo PYTHON=python3 ../configure PYTHON=python3 --build=x86_64-redhat-linux-gnu --program-prefix= --disable-dependency-tracking --prefix=/usr --exec-prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --sysconfdir=/etc --datadir=/usr/share --includedir=/usr/include --libdir=/usr/lib --libexecdir=/usr/libexec --localstatedir=/var --sharedstatedir=/var/lib --mandir=/usr/share/man --infodir=/usr/share/info "${TARGETSTUFF[@]}" --with-platform="${platform}" --without-werror --with-grubdir=grub2 --program-transform-name=s,grub,grub2, --disable-grub-mount "${werror[@]}" "${unwind[@]}" --target="${target}" --with-rpm-version=grub2-2.02-56.fc29 --host="${host}" "${enables[@]}" "${hostutils[@]}"
-    PYTHON=python3 ../configure PYTHON=python3 --build=x86_64-redhat-linux-gnu --program-prefix= --disable-dependency-tracking --prefix=/usr --exec-prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --sysconfdir=/etc --datadir=/usr/share --includedir=/usr/include --libdir=/usr/lib --libexecdir=/usr/libexec --localstatedir=/var --sharedstatedir=/var/lib --mandir=/usr/share/man --infodir=/usr/share/info "${TARGETSTUFF[@]}" --with-platform="${platform}" --without-werror --with-grubdir=grub2 --program-transform-name=s,grub,grub2, --disable-grub-mount "${werror[@]}" "${unwind[@]}" --target="${target}" --with-rpm-version=grub2-2.02-56.fc29 --host="${host}" "${enables[@]}" "${hostutils[@]}"
-#    ../configure --build=x86_64-redhat-linux-gnu --host=x86_64-redhat-linux-gnu --program-prefix= --disable-dependency-tracking --prefix=/usr --exec-prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --sysconfdir=/etc --datadir=/usr/share --includedir=/usr/include --libdir=/usr/lib --libexecdir=/usr/libexec --localstatedir=/var --sharedstatedir=/var/lib --mandir=/usr/share/man --infodir=/usr/share/info "CFLAGS=${CFLAGS} ${std} -fno-strict-aliasing -g3 -pipe -Wall -Wextra -Werror=format-security  -Wp,-D_GLIBCXX_ASSERTIONS   -grecord-gcc-switches ${annobin_str} -mtune=generic  -fstack-clash-protection -I\"${PWD}\"" "CPPFLAGS= -I\"${PWD}\"" TARGET_LDFLAGS=-static --with-platform="${platform}" --target="${target}" --with-grubdir=grub2 --program-transform-name=s,grub,grub2, --disable-grub-mount $werror ${unwind} ${TARGETSTUFF[@]} "${ENABLES[@]}"
-    if [[ ${clean} -gt 0 ]] ; then
+    set +x
+    echo PYTHON=python3 "${CONFIGURE}" PYTHON=python3 --build=x86_64-redhat-linux-gnu --program-prefix= --disable-dependency-tracking "${paths[*]}" "${TARGETSTUFF[@]}" --with-platform="${platform}" --disable-werror --with-grubdir=grub2 --program-transform-name=s,grub,grub2, --disable-grub-mount --disable-efiemu "${werror[@]}" "${unwind[@]}" --target="${target}" "${configargs[@]}" --host="${host}" "${enables[@]}" "${hostutils[@]}"
+    # shellcheck disable=SC2086
+    PYTHON=python3 bash ${DASHX} ${CONFIGURE} PYTHON=python3 --build=x86_64-redhat-linux-gnu --program-prefix= --disable-dependency-tracking "${paths[*]}" "${TARGETSTUFF[@]}" --with-platform="${platform}" --disable-werror --with-grubdir=grub2 --program-transform-name=s,grub,grub2, --disable-grub-mount --disable-efiemu "${werror[@]}" "${unwind[@]}" --target="${target}" "${configargs[@]}" --host="${host}" "${enables[@]}" "${hostutils[@]}"
+    set -x
+    if [[ ${clean} = yes ]] ; then
         make clean
     fi
     find . -name Makefile -print0 | grep -Z -z -l -e '-mtune=generic' | xargs -0 sed -i -e 's/ -mtune=generic / /g' || :
@@ -448,7 +603,7 @@ for x in ../util/grub-mkimage32.c ../util/grub-mkimage64.c ; do
 done
 
 curdir="$(basename "$(pwd)")"
-if [[ "${curdir:0:5}" == "build" ]] ; then
+if [[ "${curdir:0:5}" == "build" ]] || [[ -f ./configure ]] ; then
   build_pfx="" || :;
 else
   build_pfx="build/"
@@ -458,12 +613,15 @@ mkdir -p include/grub/
 ln -vs ../../../include/grub/${grubarch} ${build_pfx}include/grub/cpu
 ln -vs ../../../include/grub/${grubarch}/efi ${build_pfx}include/grub/machine
 
+SCAN="${SCAN:-}" || :
 if [[ "${scan}" = yes ]] ; then
-    export MAKE="scan-build"
+    export SCAN="scan-build"
 fi
 
-echo PYTHON=python3 ${MAKE} PYTHON=python3
-PYTHON=python3 ${MAKE} PYTHON=python3 -j8
+set +x
+echo PYTHON=python3 ${SCAN} ${MAKE} PYTHON=python3 ${HOST_CC:+HOST_CC="${HOST_CC}"} ${TARGET_CC:+TARGET_CC="${TARGET_CC}"}
+PYTHON=python3 ${SCAN} ${MAKE} PYTHON=python3 "${smp_flags[@]}" ${HOST_CC:+HOST_CC="${HOST_CC}"} ${TARGET_CC:+TARGET_CC="${TARGET_CC}"}
+set -x
 
 declare -a MODULE_CANDIDATES
 MODULE_CANDIDATES=(\
@@ -505,13 +663,11 @@ mkmodlist() {
 
 set -x
 mkmodlist
-# shellcheck disable=SC2086
 echo ./grub-mkimage ${verbose} -O ${grubarch}-efi -o grub${efiarch}.efi.orig "${dbgcfg[@]}" -p /EFI/${efidir} -d grub-core "${MODULES[@]}"
-# shellcheck disable=SC2086
 ./grub-mkimage ${verbose} -O ${grubarch}-efi -o grub${efiarch}.efi.orig "${dbgcfg[@]}" -p /EFI/${efidir} -d grub-core "${MODULES[@]}"
 echo pesign -f -i grub${efiarch}.efi.orig -o grub${efiarch}.efi -c 'Red Hat Test Certificate' -n /etc/pki/pesign-rh-test/ -s
 pesign -f -i grub${efiarch}.efi.orig -o grub${efiarch}.efi -c 'Red Hat Test Certificate' -n /etc/pki/pesign-rh-test/ -s
-if [[ "${annobin}" -eq 0 ]] ; then
+if [[ "${annobin}" != yes ]] ; then
     cp -vf grub${efiarch}.efi grub${efiarch}.efi.no-annobin
 fi
 
@@ -519,27 +675,27 @@ if [[ -n "${deploysh}" ]] ; then
     "${deploysh}" "grub${efiarch}.efi"
 fi
 
-if [[ "${scp}" -gt 0 ]] ; then
+if [[ "${scp}" = yes ]] ; then
     ssh "root@${scphost}" ./start.sh
     scp grubx64.efi "root@${scphost}:/boot/efi/EFI/test/grubx64.efi"
     ssh "root@${scphost}" sh -c ": ; ./stop.sh ; efibootmgr -n 0003 ; systemctl reboot ; :"
     # ssh "root@${scphost}" sh -c ": ; ./setup.sh ; systemctl reboot --firmware-setup ; :"
 fi
 
-if [[ "${pubhtml}" -gt 0 ]] ; then
+if [[ "${pubhtml}" = yes ]] ; then
     cp -v grub${efiarch}.efi ~pjones/public_html/f28-ws-netinst/EFI/"${efidir}/${instfile}"
 fi
 
 if [[ -d "${mountpoint}" ]] ; then
-  if [[ "${inst}" -eq 1 ]] ; then
+  if [[ "${inst}" = yes ]] ; then
     cp -v grub${efiarch}.efi "${mountpoint}/EFI/${efidir}/${instfile}"
     umount -v "${mountpoint}"
   fi
 
-  if [[ "${eject}" -eq 1 ]] ; then
+  if [[ "${eject}" = yes ]] ; then
     echo "ejecting ${ejectdev}"
     eject "${ejectdev}"
   fi
 fi
 
-# vim:sw=4:sts=4:ts=4:et
+# vim:sw=4:sts=4:ts=8:sw=4:et
