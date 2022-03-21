@@ -124,7 +124,7 @@
 #define GRUB_MM_HEAP_GROW_ALIGN	4096
 
 /* Minimal heap growth granularity when existing heap space is exhausted. */
-#define GRUB_MM_HEAP_GROW_EXTRA	0x100000
+#define GRUB_MM_HEAP_GROW_EXTRA	0x100000u
 
 grub_mm_region_t grub_mm_base;
 grub_mm_add_region_func_t grub_mm_add_region_fn;
