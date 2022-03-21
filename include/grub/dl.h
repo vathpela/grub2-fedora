@@ -255,6 +255,18 @@ grub_dl_is_persistent (grub_dl_t mod)
   return mod->persistent;
 }
 
+static inline const char *
+grub_dl_get_section_name (const Elf_Ehdr *e, const Elf_Shdr *s)
+{
+  Elf_Shdr *str_s;
+  const char *str;
+
+  str_s = (Elf_Shdr *) ((char *) e + e->e_shoff + e->e_shstrndx * e->e_shentsize);
+  str = (char *) e + str_s->sh_offset;
+
+  return str + s->sh_name;
+}
+
 /* Return the segment for a section of index N */
 static inline grub_dl_segment_t
 grub_dl_find_segment (grub_dl_t mod, unsigned n)

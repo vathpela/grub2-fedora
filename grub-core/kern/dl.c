@@ -625,6 +625,79 @@ grub_dl_relocate_symbols (grub_dl_t mod, void *ehdr)
   return GRUB_ERR_NONE;
 }
 
+static grub_err_t
+grub_dl_set_mem_attrs (grub_dl_t mod, void *ehdr)
+{
+  unsigned i;
+  const Elf_Shdr *s;
+  const Elf_Ehdr *e = ehdr;
+#if !defined (__i386__) && !defined (__x86_64__) && !defined(__riscv)
+  grub_size_t arch_addralign = grub_arch_dl_min_alignment ();
+  grub_addr_t tgaddr;
+  grub_uint64_t tgsz;
+#endif
+
+  grub_dprintf ("modules", "updating memory attributes for \"%s\"\n",
+		mod->name);
+  for (i = 0, s = (const Elf_Shdr *)((const char *) e + e->e_shoff);
+       i < e->e_shnum;
+       i++, s = (const Elf_Shdr *)((const char *) s + e->e_shentsize))
+    {
+      grub_dl_segment_t seg;
+      grub_uint64_t set_attrs = GRUB_MEM_ATTR_R;
+      grub_uint64_t clear_attrs = GRUB_MEM_ATTR_W|GRUB_MEM_ATTR_X;
+
+      seg = grub_dl_find_segment(mod, i);
+      if (!seg)
+	continue;
+
+      if (seg->size == 0 || !(s->sh_flags & SHF_ALLOC))
+	continue;
+
+      if (s->sh_flags & SHF_WRITE)
+	{
+	  set_attrs |= GRUB_MEM_ATTR_W;
+	  clear_attrs &= ~GRUB_MEM_ATTR_W;
+	}
+
+      if (s->sh_flags & SHF_EXECINSTR)
+	{
+	  set_attrs |= GRUB_MEM_ATTR_X;
+	  clear_attrs &= ~GRUB_MEM_ATTR_X;
+	}
+
+      grub_dprintf ("modules", "setting memory attrs for section \"%s\" to -%s%s%s+%s%s%s\n",
+		    grub_dl_get_section_name(e, s),
+		    (clear_attrs & GRUB_MEM_ATTR_R) ? "r" : "",
+		    (clear_attrs & GRUB_MEM_ATTR_W) ? "w" : "",
+		    (clear_attrs & GRUB_MEM_ATTR_X) ? "x" : "",
+		    (set_attrs & GRUB_MEM_ATTR_R) ? "r" : "",
+		    (set_attrs & GRUB_MEM_ATTR_W) ? "w" : "",
+		    (set_attrs & GRUB_MEM_ATTR_X) ? "x" : "");
+      grub_update_mem_attrs ((grub_addr_t)(seg->addr), seg->size, set_attrs, clear_attrs);
+    }
+
+#if !defined (__i386__) && !defined (__x86_64__) && !defined(__riscv)
+  tgaddr = grub_min((grub_addr_t)mod->tramp, (grub_addr_t)mod->got);
+  tgsz = grub_max((grub_addr_t)mod->trampptr, (grub_addr_t)mod->gotptr) - tgaddr;
+
+  if (tgsz)
+    {
+      tgsz = ALIGN_UP(tgsz, arch_addralign);
+
+      grub_dprintf ("modules", "updating attributes for GOT and trampolines\n",
+		    mod->name);
+      grub_update_mem_attrs (tgptr, tgsz, GRUB_MEM_ATTR_R|GRUB_MEM_ATTR_X,
+			     GRUB_MEM_ATTR_W);
+    }
+#endif
+
+  grub_dprintf ("modules", "done updating module memory attributes for \"%s\"\n",
+		mod->name);
+
+  return GRUB_ERR_NONE;
+}
+
 /* Load a module from core memory.  */
 grub_dl_t
 grub_dl_load_core_noinit (void *addr, grub_size_t size)
@@ -671,7 +744,8 @@ grub_dl_load_core_noinit (void *addr, grub_size_t size)
       || grub_dl_resolve_dependencies (mod, e)
       || grub_dl_load_segments (mod, e)
       || grub_dl_resolve_symbols (mod, e)
-      || grub_dl_relocate_symbols (mod, e))
+      || grub_dl_relocate_symbols (mod, e)
+      || grub_dl_set_mem_attrs (mod, e))
     {
       mod->fini = 0;
       grub_dl_unload (mod);
