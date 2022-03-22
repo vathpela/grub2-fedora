@@ -209,6 +209,7 @@ kernel = {
   efi = kern/efi/init.c;
   efi = kern/efi/mm.c;
   efi = term/efi/console.c;
+  efi = kern/efi/loader.c;
   efi = kern/acpi.c;
   efi = kern/efi/acpi.c;
   efi = kern/efi/sb.c;
