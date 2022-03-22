@@ -145,4 +145,6 @@ grub_efi_get_config_table (const grub_efi_packed_guid_t * const guid)
   return NULL;
 }
 
+grub_err_t EXPORT_FUNC(grub_efi_status_to_err) (grub_efi_status_t status);
+
 #endif /* ! GRUB_EFI_EFI_HEADER */
