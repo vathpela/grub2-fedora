@@ -47,6 +47,7 @@ GRUB_MOD_LICENSE ("GPLv3+");
 #ifdef GRUB_MACHINE_EFI
 #include <grub/efi/efi.h>
 #include <grub/efi/sb.h>
+#include <grub/efi/loader.h>
 #define HAS_VGA_TEXT 0
 #define DEFAULT_VIDEO_MODE "auto"
 #define ACCEPTS_PURE_TEXT 0
@@ -79,6 +80,7 @@ static struct linux_kernel_params linux_params;
 static char *linux_cmdline;
 #ifdef GRUB_MACHINE_EFI
 static grub_efi_uintn_t efi_mmap_size;
+static int nx_required = 1;
 #else
 static const grub_size_t efi_mmap_size = 0;
 #endif
@@ -348,6 +350,7 @@ struct grub_linux_boot_ctx
   grub_size_t real_size;
   struct linux_kernel_params *params;
   int e820_num;
+  int nx_supported;
 };
 
 /* Helper for grub_linux_boot.  */
@@ -409,6 +412,15 @@ grub_linux_boot (void *ctxp)
   struct grub_linux_boot_ctx *ctx = (struct grub_linux_boot_ctx *)ctxp;
   grub_size_t mmap_size;
   grub_size_t cl_offset;
+#ifdef GRUB_MACHINE_EFI
+  grub_uint64_t stack_set_attrs = GRUB_MEM_ATTR_R |
+				  GRUB_MEM_ATTR_W |
+				  GRUB_MEM_ATTR_X;
+  grub_uint64_t stack_clear_attrs = 0;
+  grub_uint64_t kernel_set_attrs = stack_set_attrs;
+  grub_uint64_t kernel_clear_attrs = stack_clear_attrs;
+  grub_uint64_t attrs;
+#endif
 
 #ifdef GRUB_MACHINE_IEEE1275
   {
@@ -426,6 +438,44 @@ grub_linux_boot (void *ctxp)
     linux_params.ofw_cif_handler = (grub_uint32_t) grub_ieee1275_entry_fn;
     linux_params.ofw_idt = 0;
   }
+#endif
+
+#ifdef GRUB_MACHINE_EFI
+  if (ctx->nx_supported)
+    {
+      kernel_set_attrs &= ~GRUB_MEM_ATTR_W;
+      kernel_clear_attrs |= GRUB_MEM_ATTR_W;
+      stack_set_attrs &= ~GRUB_MEM_ATTR_X;
+      stack_clear_attrs |= GRUB_MEM_ATTR_X;
+    }
+
+  grub_dprintf ("nx", "Setting attributes for 0x%"PRIxGRUB_ADDR"-0x%"PRIxGRUB_ADDR" to r%cx\n",
+                   ctx->real_mode_target, ctx->real_size - 1,
+                   (kernel_set_attrs & GRUB_MEM_ATTR_W) ? 'w' : '-');
+  grub_update_mem_attrs (ctx->real_mode_target, ctx->real_size,
+			 kernel_set_attrs, kernel_clear_attrs);
+
+  grub_get_mem_attrs (ctx->real_mode_target, 4096, &attrs);
+  grub_dprintf ("nx", "permissions for 0x%"PRIxGRUB_ADDR" are %s%s%s\n",
+               ctx->real_mode_target,
+               (attrs & GRUB_MEM_ATTR_R) ? "r" : "-",
+               (attrs & GRUB_MEM_ATTR_W) ? "w" : "-",
+               (attrs & GRUB_MEM_ATTR_X) ? "x" : "-");
+  if (grub_stack_addr != (grub_addr_t)-1ll)
+    {
+      grub_dprintf ("nx", "Setting attributes for stack at 0x%"PRIxGRUB_ADDR"-0x%"PRIxGRUB_ADDR" to rw%c\n",
+                   grub_stack_addr, grub_stack_addr + grub_stack_size - 1,
+                   (stack_set_attrs & GRUB_MEM_ATTR_X) ? 'x' : '-');
+      grub_update_mem_attrs (grub_stack_addr, grub_stack_size,
+                            stack_set_attrs, stack_clear_attrs);
+
+      grub_get_mem_attrs (grub_stack_addr, 4096, &attrs);
+      grub_dprintf ("nx", "permissions for 0x%"PRIxGRUB_ADDR" are %s%s%s\n",
+                   grub_stack_addr,
+                   (attrs & GRUB_MEM_ATTR_R) ? "r" : "-",
+                   (attrs & GRUB_MEM_ATTR_W) ? "w" : "-",
+                   (attrs & GRUB_MEM_ATTR_X) ? "x" : "-");
+    }
 #endif
 
   modevar = grub_env_get ("gfxpayload");
@@ -683,6 +733,23 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
 		    argv[0]);
       goto fail;
     }
+
+#ifdef GRUB_MACHINE_EFI
+  if (grub_efi_check_nx_required (&nx_required) != GRUB_ERR_NONE)
+    goto fail;
+
+  if (grub_efi_check_nx_image_support ((grub_addr_t)&lh, sizeof (lh),
+				       &ctx->nx_supported)
+      != GRUB_ERR_NONE)
+    goto fail;
+
+  if (nx_required && !ctx->nx_supported)
+    {
+      grub_error (GRUB_ERR_BAD_OS,
+		  N_("kernel does not support NX loading required by policy"));
+      goto fail;
+    }
+#endif
 
   if (lh.boot_flag != grub_cpu_to_le16_compile_time (0xaa55))
     {

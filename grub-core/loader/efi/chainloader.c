@@ -32,6 +32,7 @@
 #include <grub/efi/api.h>
 #include <grub/efi/efi.h>
 #include <grub/efi/disk.h>
+#include <grub/efi/loader.h>
 #include <grub/command.h>
 #include <grub/i18n.h>
 #include <grub/net.h>
@@ -226,6 +227,8 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   grub_efi_uintn_t pages = 0;
   grub_efi_char16_t *cmdline = NULL;
   grub_efi_handle_t image_handle = NULL;
+  int nx_supported = 0;
+  int nx_required = 1;
 
   if (argc == 0)
     return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("filename expected"));
@@ -307,6 +310,17 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
 	grub_error (GRUB_ERR_BAD_OS, N_("premature end of file %s"),
 		    filename);
 
+      goto fail;
+    }
+
+  if (grub_efi_check_nx_image_support (address, size, &nx_supported)
+      != GRUB_ERR_NONE)
+    goto fail;
+
+  if (nx_required && !nx_supported)
+    {
+      grub_error (GRUB_ERR_BAD_OS,
+		  N_("kernel does not support NX loading required by policy"));
       goto fail;
     }
 

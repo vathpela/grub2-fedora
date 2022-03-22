@@ -427,6 +427,8 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
   grub_file_t file = 0;
   struct linux_arch_kernel_header lh;
   grub_err_t err;
+  int nx_supported = 0;
+  int nx_required = 1;
 
   grub_dl_ref (my_mod);
 
@@ -443,6 +445,9 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
   kernel_size = grub_file_size (file);
 
   if (grub_arch_efi_linux_load_image_header (file, &lh) != GRUB_ERR_NONE)
+    goto fail;
+
+  if (grub_efi_check_nx_required (&nx_required) != GRUB_ERR_NONE)
     goto fail;
 
   grub_loader_unset();
@@ -467,6 +472,16 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
     }
 
   grub_dprintf ("linux", "kernel @ %p\n", kernel_addr);
+  if (grub_efi_check_nx_image_support (kernel_addr, kernel_size, &nx_supported)
+      != GRUB_ERR_NONE)
+    goto fail;
+
+  if (nx_required && !nx_supported)
+    {
+      grub_error (GRUB_ERR_BAD_OS,
+		  N_("kernel does not support NX loading required by policy"));
+      goto fail;
+    }
 
   cmdline_size = grub_loader_cmdline_size (argc, argv) + sizeof (LINUX_IMAGE);
   linux_args = grub_malloc (cmdline_size);

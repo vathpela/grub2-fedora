@@ -29,6 +29,9 @@
 #include <grub/lib/cmdline.h>
 #include <grub/linux.h>
 #include <grub/verify.h>
+#ifdef GRUB_MACHINE_EFI
+#include <grub/efi/loader.h>
+#endif
 
 GRUB_MOD_LICENSE ("GPLv3+");
 
@@ -306,6 +309,10 @@ linux_load (const char *filename, grub_file_t file)
 {
   struct linux_arm_kernel_header *lh;
   int size;
+#ifdef GRUB_MACHINE_EFI
+  int nx_supported = 0;
+  int nx_required = 1;
+#endif
 
   size = grub_file_size (file);
 
@@ -320,6 +327,19 @@ linux_load (const char *filename, grub_file_t file)
 		    filename);
       return grub_errno;
     }
+
+#ifdef GRUB_MACHINE_EFI
+  if (grub_efi_check_nx_image_support (linux_addr, size, &nx_supported)
+      != GRUB_ERR_NONE)
+    goto fail;
+
+  if (nx_required && !nx_supported)
+    {
+      grub_error (GRUB_ERR_BAD_OS,
+		  N_("kernel does not support NX loading required by policy"));
+      goto fail;
+    }
+#endif
 
   lh = (void *) linux_addr;
 
