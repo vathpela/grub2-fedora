@@ -46,7 +46,30 @@
 
 #define GRUB_PE32_MSDOS_STUB_SIZE	0x80
 
-#define GRUB_PE32_MAGIC			0x5a4d
+#define GRUB_DOS_MAGIC			0x5a4d
+
+struct grub_dos_header
+{
+  grub_uint16_t magic;
+  grub_uint16_t cblp;
+  grub_uint16_t cp;
+  grub_uint16_t crlc;
+  grub_uint16_t cparhdr;
+  grub_uint16_t minalloc;
+  grub_uint16_t maxalloc;
+  grub_uint16_t ss;
+  grub_uint16_t sp;
+  grub_uint16_t csum;
+  grub_uint16_t ip;
+  grub_uint16_t cs;
+  grub_uint16_t lfarlc;
+  grub_uint16_t ovno;
+  grub_uint16_t res0[4];
+  grub_uint16_t oemid;
+  grub_uint16_t oeminfo;
+  grub_uint16_t res1[10];
+  grub_uint32_t lfanew;
+};
 
 struct grub_msdos_image_header
 {
@@ -263,7 +286,8 @@ struct grub_pe32_section_table
 #define GRUB_PE32_SCN_ALIGN_SHIFT		20
 #define GRUB_PE32_SCN_ALIGN_MASK		7
 
-#define GRUB_PE32_SIGNATURE_SIZE 4
+#define GRUB_PE32_SIGNATURE_SIZE		4
+#define GRUB_PE32_SIGNATURE			"PE\0\0"
 
 struct grub_pe_image_header
 {
