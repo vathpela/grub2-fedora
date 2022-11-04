@@ -26,6 +26,34 @@
 #define GRUB_PACKED __attribute__ ((packed))
 #endif
 
+struct grub_acpi_generic_address_structure
+{
+  grub_uint8_t address_space_id;
+  grub_uint8_t register_bit_width;
+  grub_uint8_t register_bit_offset;
+  grub_uint8_t access_size;
+  grub_uint64_t address;
+} GRUB_PACKED;
+
+#define GRUB_ACPI_GAS_ASID_SYSTEM_MEMORY	0x00
+#define GRUB_ACPI_GAS_ASID_SYSTEM_IO		0x01
+#define GRUB_ACPI_GAS_ASID_PCI_CONFIG		0x02
+#define GRUB_ACPI_GAS_ASID_EC			0x03
+#define GRUB_ACPI_GAS_ASID_SMBUS		0x04
+#define GRUB_ACPI_GAS_ASID_SYSTEM_CMOS		0x05
+#define GRUB_ACPI_GAS_ASID_PCI_BAR		0x06
+#define GRUB_ACPI_GAS_ASID_IPMI			0x07
+#define GRUB_ACPI_GAS_ASID_GPIO			0x08
+#define GRUB_ACPI_GAS_ASID_GENERIC_SERIAL_BUS	0x09
+#define GRUB_ACPI_GAS_ASID_PLATFORM_COMMS	0x0a
+#define GRUB_ACPI_GAS_ASID_FUNCTIONAL_FIXED_HW	0x7f
+
+#define GRUB_ACPI_GAS_ACCESS_SIZE_UNDEFINED	0x00
+#define GRUB_ACPI_GAS_ACCESS_SIZE_BYTE		0x01
+#define GRUB_ACPI_GAS_ACCESS_SIZE_WORD		0x02
+#define GRUB_ACPI_GAS_ACCESS_SIZE_DWORD		0x03
+#define GRUB_ACPI_GAS_ACCESS_SIZE_QWORD		0x04
+
 #define GRUB_RSDP_SIGNATURE "RSD PTR "
 #define GRUB_RSDP_SIGNATURE_SIZE 8
 
@@ -77,6 +105,70 @@ struct grub_acpi_fadt
   grub_uint64_t facs_xaddr;
   grub_uint64_t dsdt_xaddr;
   grub_uint8_t somefields5[96];
+} GRUB_PACKED;
+
+#define GRUB_ACPI_DBG2_SIGNATURE "DBG2"
+
+struct grub_acpi_dbg2_device_info
+{
+  grub_uint8_t revision;
+  grub_uint16_t length;
+  grub_uint8_t number_of_generic_address_registers;
+  grub_uint16_t namespace_string_length;
+  grub_uint16_t namespace_string_offset;
+  grub_uint16_t oem_data_length;
+  grub_uint16_t oem_data_offset;
+  grub_uint16_t port_type;
+  grub_uint16_t port_subtype;
+  grub_uint16_t reserved;
+  grub_uint16_t base_address_register_offset;
+  grub_uint16_t address_size_offset;
+  // struct grub_acpi_generic_address_structure base_address_register[number_of_generic_address_registers];
+  // grub_uint32_t address_size[number_of_generic_address_registers];
+  // grub_uint8_t namespace_string[namespace_string_length];
+  // grub_uint8_t oem_data[oem_data_length];
+} GRUB_PACKED;
+
+#define GRUB_ACPI_DBG_PORT_SERIAL	0x8000
+#define GRUB_ACPI_DBG_PORT_SERIAL_16550		0x0000
+#define GRUB_ACPI_DBG_PORT_SERIAL_16550_DBG1	0x0001
+#define GRUB_ACPI_DBG_PORT_SERIAL_MAX311xE	0x0002
+#define GRUB_ACPI_DBG_PORT_SERIAL_PL011		0x0003
+#define GRUB_ACPI_DBG_PORT_SERIAL_MSM8x60	0x0004
+#define GRUB_ACPI_DBG_PORT_SERIAL_NVIDIA_16550	0x0005
+#define GRUB_ACPI_DBG_PORT_SERIAL_TI_OMAP	0x0006
+#define GRUB_ACPI_DBG_PORT_SERIAL_RESERVED_0	0x0007
+#define GRUB_ACPI_DBG_PORT_SERIAL_APM88xxxx	0x0008
+#define GRUB_ACPI_DBG_PORT_SERIAL_MSM8974	0x0009
+#define GRUB_ACPI_DBG_PORT_SERIAL_SAM5250	0x000a
+#define GRUB_ACPI_DBG_PORT_SERIAL_INTEL_USIF	0x000b
+#define GRUB_ACPI_DBG_PORT_SERIAL_iMX_6		0x000c
+#define GRUB_ACPI_DBG_PORT_SERIAL_ARM_SBSA_2	0x000d
+#define GRUB_ACPI_DBG_PORT_SERIAL_ARM_SBSA	0x000e
+#define GRUB_ACPI_DBG_PORT_SERIAL_ARM_DCC	0x000f
+#define GRUB_ACPI_DBG_PORT_SERIAL_BCM2835	0x0010
+#define GRUB_ACPI_DBG_PORT_SERIAL_SDM845_18432	0x0011
+#define GRUB_ACPI_DBG_PORT_SERIAL_16550_GAS	0x0012
+#define GRUB_ACPI_DBG_PORT_SERIAL_SDM845_7372	0x0013
+#define GRUB_ACPI_DBG_PORT_SERIAL_INTEL_LPSS	0x0014
+
+#define GRUB_ACPI_DBG_PORT_1394	0x8001
+#define GRUB_ACPI_DBG_PORT_1394_HCI	0x0000
+
+#define GRUB_ACPI_DBG_PORT_USB	0x8002
+#define GRUB_ACPI_DBG_PORT_USB_XHCI	0x0000
+#define GRUB_ACPI_DBG_PORT_USB_EHCI	0x0001
+
+#define GRUB_ACPI_DBG_PORT_NET	0x8003
+
+#define GRUB_ACPI_DBG_PORT_INVALID 0xffff
+
+struct grub_acpi_dbg2
+{
+  struct grub_acpi_table_header hdr;
+  grub_uint32_t offset_dbg_device_info;
+  grub_uint32_t number_dbg_device_info;
+  // struct grub_acpi_dbg2_device_info device_info[number_dbg_device_info];
 } GRUB_PACKED;
 
 #define GRUB_ACPI_MADT_SIGNATURE "APIC"
