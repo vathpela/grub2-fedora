@@ -128,4 +128,21 @@ struct grub_net_card;
 grub_efi_handle_t
 grub_efinet_get_device_handle (struct grub_net_card *card);
 
+static inline void *
+grub_efi_get_config_table (const grub_efi_packed_guid_t * const guid)
+{
+  grub_efi_uintn_t i;
+
+  for (i = 0; i < grub_efi_system_table->num_table_entries; i++)
+    {
+      grub_efi_configuration_table_t *ct =
+	&grub_efi_system_table->configuration_table[i];
+
+      if (grub_memcmp (guid, &ct->vendor_guid, sizeof (grub_efi_guid_t)) == 0)
+	return (void *)ct->vendor_table;
+    }
+
+  return NULL;
+}
+
 #endif /* ! GRUB_EFI_EFI_HEADER */
