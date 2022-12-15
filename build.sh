@@ -70,11 +70,13 @@ paths=(
        --sharedstatedir=/var/lib
        --sysconfdir=/etc
    )
-pie=()
+pie=(-fPIE)
 platform=efi
 pubhtml=no
 scp=no
 scphost=10.20.1.111
+scppath=/boot/efi/EFI/test/grubx64.efi
+shutdown=no
 std=(-std=gnu99) || :
 target="" || :
 unwind=()
@@ -95,14 +97,14 @@ usage() {
     fi
     (
         echo "usage: build [--efidir DIR] [--arch ARCH] [--bootnum ####] \\"
-        echo "             [--scp|--no-scp] [--scphost SCPHOST] \\"
+        echo "             [--scp|--no-scp] [--scphost SCPHOST] [--scppath SCPPATH]\\"
         echo "             [--std STD] [--pubhtml] [--annobin|--no-annobin] [--autogen|--no-autogen] \\"
         echo "             [--configure|--no-configure] [--clean|--no-clean] [--werror|--no-werror] \\"
         echo "             [--host HOST] [--debugcfg|--debugcfg=CFG|--no-debugcfg] \\"
         echo "             [--platform PLATFORM] [--scrub] [--scrub-objs] \\"
         echo "             [--ccache|--no-ccache] [--verbose] [--scan] \\"
         echo "             [--upstream-gnulib|--no-upstream-gnulib] \\"
-        echo "             [--no-parallel-make] \\"
+        echo "             [--no-parallel-make] [--shutdown]\\"
         echo "             [--deploy DEPLOYSCRIPT] [--hostutils] \\"
         echo "             [--enable-FOO] [--disable-FOO] "
     ) >> "${out}"
@@ -229,6 +231,9 @@ while [[ $# -gt 0 ]]; do
         " --hostutils ")
             hostutils=(--with-utils=host)
             ;;
+        " --no-hostutils ")
+            hostutils=()
+            ;;
         " --install ")
             inst=yes
             ;;
@@ -286,6 +291,26 @@ while [[ $# -gt 0 ]]; do
             ;;
         " --scp-host="*)
             scphost="${1:11}"
+            ;;
+        " --scppath ")
+            scppath="${2}"
+            shift
+            ;;
+        " --scppath="*)
+            scppath="${1:7}"
+            ;;
+        " --scp-path ")
+            scppath="${2}"
+            shift
+            ;;
+        " --scp-path="*)
+            scppath="${1:11}"
+            ;;
+        " --shutdown ")
+            shutdown=yes
+            ;;
+        " --no-shutdown ")
+            shutdown=no
             ;;
         " --scrub-a"*" ")
             rm -rf [0123456789Macdefghijklmnopqrstuvwxyz]* build-grub-mkfont build ../gnulib
@@ -367,6 +392,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${bear}" = yes ]] ; then
+    annobin=no
+    harden=no
     BUILD_CC=clang
     HOST_CC=clang
     TARGET_CC=clang
@@ -466,6 +493,11 @@ case "${arch}" in
     exit 1
 esac
 
+if [[ "${compiler}" = clang ]] ; then
+    host_arch_cflags[${#host_arch_cflags}]="-DMAJOR_IN_SYSMACROS"
+    target_arch_cflags[${#target_arch_cflags}]="-DMAJOR_IN_SYSMACROS"
+fi
+
 if [[ "${compiler}" = gcc ]] && [[ -f "/usr/bin/${target}-${compiler}" ]] ; then
     TARGET_CC="${target}-${compiler}"
 fi
@@ -503,6 +535,10 @@ hardened_ld=("${hardened_ld[@]}"
 
 if [[ "${ccache}" = yes ]] ; then
     ccache=$(find /usr/lib*/ccache/ '(' -type f -o -type l ')' -a -iname "${target}-gcc" 2>/dev/null | head -1)
+else
+    CCACHE_DISABLE=1
+    echo "DISABLING CCACHE"
+    export CCACHE_DISABLE
 fi
 
 if [[ "${efidir}" = BOOT ]] ; then
@@ -524,6 +560,8 @@ if [[ ${configure} = yes ]] || [[ ! -e Makefile ]] ; then
         CONFIGURE=../configure
     elif [[ -f ./configure ]] ; then
         CONFIGURE=./configure
+    else
+        CONFIGURE=""
     fi
     if [[ ${autogen} != "no" ]] || [[ -z "${CONFIGURE}" ]] ; then
         if [[ -f configure.ac ]] || [[ -f configure.in ]] ; then
@@ -596,7 +634,11 @@ if [[ ${configure} = yes ]] || [[ ! -e Makefile ]] ; then
     find . -name Makefile -print0 | grep -Z -z -l -e '-mtune=generic' | xargs -0 sed -i -e 's/ -mtune=generic / /g' || :
 fi
 
-for x in ../util/grub-mkimage32.c ../util/grub-mkimage64.c ; do
+for x in ../util/grub-mkimage32.c ../util/grub-mkimage64.c \
+         util/grub-mkimage32.c util/grub-mkimage64.c ; do
+    if [[ ! -f "${x}" ]] ; then
+        continue
+    fi
     if [[ ${x} -ot ../util/grub-mkimagexx.c ]] ; then
         touch "${x}"
     fi
@@ -619,7 +661,7 @@ if [[ "${scan}" = yes ]] ; then
 fi
 
 set +x
-echo PYTHON=python3 ${SCAN} ${MAKE} PYTHON=python3 ${HOST_CC:+HOST_CC="${HOST_CC}"} ${TARGET_CC:+TARGET_CC="${TARGET_CC}"}
+echo PYTHON=python3 ${SCAN} ${MAKE} PYTHON=python3 "${smp_flags[@]}" ${HOST_CC:+HOST_CC="${HOST_CC}"} ${TARGET_CC:+TARGET_CC="${TARGET_CC}"}
 PYTHON=python3 ${SCAN} ${MAKE} PYTHON=python3 "${smp_flags[@]}" ${HOST_CC:+HOST_CC="${HOST_CC}"} ${TARGET_CC:+TARGET_CC="${TARGET_CC}"}
 set -x
 
@@ -632,7 +674,7 @@ MODULE_CANDIDATES=(\
  fat font \
  gfxmenu gfxterm gzio \
  halt hfsplus http \
- iso9660 \
+ increment iso9660 \
  jpeg \
  linux loadenv loopback lvm lsefi lsefimmap \
  mdraid09 mdraid1x minicmd \
@@ -676,10 +718,15 @@ if [[ -n "${deploysh}" ]] ; then
 fi
 
 if [[ "${scp}" = yes ]] ; then
-    ssh "root@${scphost}" ./start.sh
-    scp grubx64.efi "root@${scphost}:/boot/efi/EFI/test/grubx64.efi"
-    ssh "root@${scphost}" sh -c ": ; ./stop.sh ; efibootmgr -n 0003 ; systemctl reboot ; :"
+    #ssh "root@${scphost}" ./start.sh
+    scp grubx64.efi "root@${scphost}:${scppath}"
+    #ssh "root@${scphost}" shutdown -h now
+    #ssh "root@${scphost}" sh -c ": ; ./stop.sh ; efibootmgr -n 0003 ; systemctl reboot ; :"
     # ssh "root@${scphost}" sh -c ": ; ./setup.sh ; systemctl reboot --firmware-setup ; :"
+fi
+
+if [[ "${shutdown}" = yes ]] ; then
+    ssh "root@${scphost}" shutdown -h now
 fi
 
 if [[ "${pubhtml}" = yes ]] ; then
@@ -697,5 +744,6 @@ if [[ -d "${mountpoint}" ]] ; then
     eject "${ejectdev}"
   fi
 fi
+date
 
 # vim:sw=4:sts=4:ts=8:sw=4:et
