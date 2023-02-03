@@ -27,6 +27,7 @@
 #include <grub/elf.h>
 #include <grub/list.h>
 #include <grub/misc.h>
+#include <grub/mm.h>
 #endif
 
 /*
@@ -252,6 +253,19 @@ static inline int
 grub_dl_is_persistent (grub_dl_t mod)
 {
   return mod->persistent;
+}
+
+/* Return the segment for a section of index N */
+static inline grub_dl_segment_t
+grub_dl_find_segment (grub_dl_t mod, unsigned n)
+{
+  grub_dl_segment_t seg;
+
+  for (seg = mod->segment; seg; seg = seg->next)
+    if (seg->section == n)
+      return seg;
+
+  return NULL;
 }
 
 #endif

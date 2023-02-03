@@ -609,20 +609,16 @@ grub_dl_relocate_symbols (grub_dl_t mod, void *ehdr)
 	grub_dl_segment_t seg;
 	grub_err_t err;
 
-	/* Find the target segment.  */
-	for (seg = mod->segment; seg; seg = seg->next)
-	  if (seg->section == s->sh_info)
-	    break;
+	seg = grub_dl_find_segment(mod, s->sh_info);
+	if (!seg)
+	  continue;
 
-	if (seg)
-	  {
-	    if (!mod->symtab)
-	      return grub_error (GRUB_ERR_BAD_MODULE, "relocation without symbol table");
+	if (!mod->symtab)
+	  return grub_error (GRUB_ERR_BAD_MODULE, "relocation without symbol table");
 
-	    err = grub_arch_dl_relocate_symbols (mod, ehdr, s, seg);
-	    if (err)
-	      return err;
-	  }
+	err = grub_arch_dl_relocate_symbols (mod, ehdr, s, seg);
+	if (err)
+	  return err;
       }
 
   grub_dprintf ("modules", "done relocating symbols for \"%s\"\n", mod->name);
