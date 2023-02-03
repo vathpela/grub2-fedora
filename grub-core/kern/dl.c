@@ -232,6 +232,8 @@ grub_dl_load_segments (grub_dl_t mod, const Elf_Ehdr *e)
 #endif
   char *ptr;
 
+  grub_dprintf ("modules", "loading segments for \"%s\"\n", mod->name);
+
   arch_addralign = grub_arch_dl_min_alignment ();
 
   for (i = 0, s = (const Elf_Shdr *)((const char *) e + e->e_shoff);
@@ -331,6 +333,7 @@ grub_dl_load_segments (grub_dl_t mod, const Elf_Ehdr *e)
   ptr += got;
 #endif
 
+  grub_dprintf ("modules", "done loading segments for \"%s\"\n", mod->name);
   return GRUB_ERR_NONE;
 }
 
@@ -597,6 +600,7 @@ grub_dl_relocate_symbols (grub_dl_t mod, void *ehdr)
   Elf_Shdr *s;
   unsigned i;
 
+  grub_dprintf ("modules", "relocating symbols for \"%s\"\n", mod->name);
   for (i = 0, s = (Elf_Shdr *) ((char *) e + e->e_shoff);
        i < e->e_shnum;
        i++, s = (Elf_Shdr *) ((char *) s + e->e_shentsize))
@@ -621,6 +625,7 @@ grub_dl_relocate_symbols (grub_dl_t mod, void *ehdr)
 	  }
       }
 
+  grub_dprintf ("modules", "done relocating symbols for \"%s\"\n", mod->name);
   return GRUB_ERR_NONE;
 }
 
