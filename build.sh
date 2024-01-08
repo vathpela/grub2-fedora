@@ -188,6 +188,13 @@ while [[ $# -gt 0 ]]; do
         " --disable-"*" "|" --enable-"*" ")
             enables[${#enables[@]}]="${1}"
             ;;
+        " --efidir ")
+            efidir="${2}"
+            shift
+            ;;
+        " --efidir="*)
+            efidir="${1:9}"
+            ;;
         " --eject ")
             eject=yes
             ;;
