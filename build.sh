@@ -22,11 +22,16 @@ CFLAGS_PRE=(
             -grecord-gcc-switches
             -pipe
             "-Wp,-D_GLIBCXX_ASSERTIONS"
+            -Wno-error=int-to-pointer-cast
+            -Wno-error=pointer-to-int-cast
         )
 DISTRO_CFLAGS_PRE=() || :
 W_CFLAGS=(
           -Wno-unused-parameter
           -Wno-unused-variable
+          -Wno-error=unused-variable
+          -Wno-error=int-to-pointer-cast
+          -Wno-error=pointer-to-int-cast
           -Wall
           -Wextra
       )
