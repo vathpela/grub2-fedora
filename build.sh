@@ -476,7 +476,7 @@ case "${arch}" in
     efiarch=ia32
     arch=i386
     compiler=gcc
-    target_arch_cflags=(-m32 -fcf-protection)
+    target_arch_cflags=(-m32)
     ;;
   arm)
     grubarch=arm
