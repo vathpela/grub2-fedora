@@ -2090,6 +2090,11 @@ HOST_CPPFLAGS="$HOST_CPPFLAGS -I\$(top_builddir)/include"
 TARGET_CPPFLAGS="$TARGET_CPPFLAGS -I\$(top_srcdir)/include"
 TARGET_CPPFLAGS="$TARGET_CPPFLAGS -I\$(top_builddir)/include"
 
+unset CFLAGS
+unset CPPFLAGS
+unset CCASFLAGS
+unset LDFLAGS
+
 GRUB_TARGET_CPU="${target_cpu}"
 GRUB_PLATFORM="${platform}"
 
