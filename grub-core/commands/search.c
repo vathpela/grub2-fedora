@@ -203,12 +203,9 @@ iterate_device (const char *name, void *data)
             if (root_disk != NULL && *root_disk != '\0' &&
     	        name_disk != NULL && *name_disk != '\0')
               {
-                grub_device_t dev, dev_part;
-
                 if (is_device_usb(name) && !is_device_usb(root_dev))
                   {
                     char *quid_name = NULL;
-                    int longlist = 0;
                     struct uuid_context uuid_ctx;
                     int ret = 0;
 
@@ -216,7 +213,7 @@ iterate_device (const char *name, void *data)
                       {
                       if (!grub_strcmp(quid_name, ctx->key))
                         {
-                          uuid_ctx.name = name;
+                          uuid_ctx.name = (char *)name;
                           uuid_ctx.uuid = quid_name;
 
                           ret = grub_device_iterate (check_for_duplicate, &uuid_ctx);
