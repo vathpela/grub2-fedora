@@ -916,7 +916,7 @@ grub_ahci_reset_port (struct grub_ahci_device *dev, int force)
 static grub_err_t
 grub_ahci_readwrite_real (struct grub_ahci_device *dev,
 			  struct grub_disk_ata_pass_through_parms *parms,
-			  int spinup, int reset)
+			  int spinup __attribute__((__unused__)), int reset)
 {
   struct grub_pci_dma_chunk *bufc;
   grub_uint64_t endtime;

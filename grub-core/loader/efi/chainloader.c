@@ -62,12 +62,9 @@ struct grub_secureboot_chainloader_context {
 static grub_err_t
 grub_start_image (grub_efi_handle_t handle)
 {
-  grub_efi_boot_services_t *b;
   grub_efi_status_t status;
   grub_efi_uintn_t exit_data_size;
   grub_efi_char16_t *exit_data = NULL;
-
-  b = grub_efi_system_table->boot_services;
 
   status = grub_efi_start_image (handle, &exit_data_size, &exit_data);
   if (status != GRUB_EFI_SUCCESS)
@@ -863,11 +860,8 @@ grub_load_image(grub_efi_device_path_t *file_path, void *boot_image,
 		grub_efi_char16_t *cmdline, grub_ssize_t cmdline_len,
 		grub_efi_handle_t *image_handle_out)
 {
-  grub_efi_boot_services_t *b;
   grub_efi_status_t status;
   grub_efi_loaded_image_t *loaded_image;
-
-  b = grub_efi_system_table->boot_services;
 
   status = grub_efi_load_image (0, grub_efi_image_handle, file_path,
 				boot_image, image_size, image_handle_out);
