@@ -711,8 +711,7 @@ grub_install_make_image_wrap_file (const char *dir, const char *prefix,
 
   grub_util_info ("grub-mkimage --directory '%s' --prefix '%s' --output '%s'"
 		  " --format '%s' --compression '%s'"
-		  " --appended-signture-size %zu %s%s%s\n",
-		  " --format '%s' --compression '%s'%s%s%s%s\n",
+		  " --appended-signture-size %zu %s%s%s%s\n",
 		  dir, prefix, outname,
 		  mkimage_target, compnames[compression],
 		  appsig_size,
