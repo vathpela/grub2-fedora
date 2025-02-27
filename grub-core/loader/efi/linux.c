@@ -724,7 +724,9 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
   grub_off_t filereadlen;
   void *kernel = NULL;
   grub_err_t err;
+#if !defined(__i386__) && !defined(__x86_64__)
   int nx_supported = 1;
+#endif
   int nx_required = 0;
 
   grub_dl_ref (my_mod);
