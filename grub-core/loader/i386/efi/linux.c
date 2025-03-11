@@ -36,6 +36,10 @@
 
 GRUB_MOD_LICENSE ("GPLv3+");
 
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-variable"
+
 static grub_dl_t my_mod;
 
 static grub_command_t cmd_linux, cmd_initrd;
@@ -95,7 +99,8 @@ static struct allocation_choice max_addresses[] =
       { INITRD_MEM, GRUB_EFI_MAX_ALLOCATION_ADDRESS, GRUB_EFI_ALLOCATE_MAX_ADDRESS },
     { NO_MEM, 0, 0 }
   };
-static struct allocation_choice saved_addresses[sizeof(max_addresses) / sizeof(max_addresses[0])];
+static struct allocation_choice
+saved_addresses[sizeof(max_addresses) / sizeof(max_addresses[0])];
 
 #define save_addresses() grub_memcpy(saved_addresses, max_addresses, sizeof(max_addresses))
 #define restore_addresses() grub_memcpy(max_addresses, saved_addresses, sizeof(max_addresses))
@@ -108,8 +113,7 @@ kernel_free(void *addr, grub_efi_uintn_t size)
 			 BYTES_TO_PAGES(size));
 }
 
-static void *
-kernel_alloc(kernel_alloc_purpose_t purpose,
+static void *kernel_alloc(kernel_alloc_purpose_t purpose,
 	     grub_efi_uintn_t size,
 	     grub_efi_memory_type_t memtype,
 	     const char * const errmsg)
@@ -181,11 +185,11 @@ grub_linuxefi_boot (void *data)
   grub_efi_handle_t image_handle;
   grub_efi_status_t status;
   grub_efi_loaded_image_t *loaded_image;
-  int len;
+  int len = 0;
 
   grub_addr_t addr = (grub_addr_t)context->kernel_mem;
   grub_size_t size = context->kernel_size;
-  char *args = context->params;
+  char *args = context->cmdline;
 
   mempath = grub_malloc (2 * sizeof (grub_efi_memory_mapped_device_path_t));
   if (!mempath)
@@ -220,25 +224,34 @@ grub_linuxefi_boot (void *data)
       grub_error (GRUB_ERR_BAD_FIRMWARE, "missing loaded_image proto");
       goto unload;
     }
-  loaded_image->load_options_size = len =
-    (grub_strlen (args) + 1) * sizeof (grub_efi_char16_t);
-  loaded_image->load_options =
-    grub_efi_allocate_any_pages (GRUB_EFI_BYTES_TO_PAGES (len));
-  if (!loaded_image->load_options)
-    return grub_errno;
+  if (args)
+    {
+      loaded_image->load_options_size = len =
+	(grub_strlen (args) + 1) * sizeof (grub_efi_char16_t);
+      grub_dprintf ("linux", "got here\n");
+      loaded_image->load_options =
+	grub_efi_allocate_any_pages (GRUB_EFI_BYTES_TO_PAGES (len));
+      grub_dprintf ("linux", "got here\n");
+      if (!loaded_image->load_options)
+	return grub_errno;
+      grub_dprintf ("linux", "got here\n");
 
-  loaded_image->load_options_size =
-    2 * grub_utf8_to_utf16 (loaded_image->load_options, len,
-			    (grub_uint8_t *) args, len, NULL);
+      loaded_image->load_options_size =
+	2 * grub_utf8_to_utf16 (loaded_image->load_options, len,
+				(grub_uint8_t *) args, len, NULL);
+    }
 
   grub_dprintf ("linux", "starting image %p\n", image_handle);
   status = grub_efi_start_image (image_handle, 0, NULL);
 
   /* When successful, not reached */
   grub_error (GRUB_ERR_BAD_OS, "start_image() returned 0x%" PRIxGRUB_EFI_UINTN_T, status);
-  grub_efi_free_pages ((grub_addr_t) loaded_image->load_options,
-		       GRUB_EFI_BYTES_TO_PAGES (len));
-  loaded_image->load_options = NULL;
+  if (args)
+    {
+      grub_efi_free_pages ((grub_addr_t) loaded_image->load_options,
+			   GRUB_EFI_BYTES_TO_PAGES (len));
+      loaded_image->load_options = NULL;
+    }
 unload:
   grub_efi_unload_image (image_handle);
 
@@ -253,10 +266,13 @@ grub_linuxefi_unload (void *data)
 
   grub_dl_unref (my_mod);
 
-  kernel_free (context->initrd_mem, params->ramdisk_size);
-  kernel_free (context->cmdline, params->cmdline_size + 1);
-  kernel_free (context->kernel_mem, context->kernel_size);
-  kernel_free (params, sizeof(*params));
+  if (params)
+    {
+      kernel_free (context->initrd_mem, params->ramdisk_size);
+      kernel_free (context->cmdline, params->cmdline_size + 1);
+      kernel_free (context->kernel_mem, context->kernel_size);
+      kernel_free (params, sizeof(*params));
+    }
   cmd_initrd->data = 0;
   cmd_initrdefi->data = 0;
   grub_free (context);
@@ -310,6 +326,7 @@ read(grub_file_t file, grub_uint8_t *bufp, grub_size_t len)
 static grub_err_t
 grub_cmd_initrd (grub_command_t cmd, int argc, char *argv[])
 {
+#if 0
   grub_file_t *files = 0;
   int i, nfiles = 0;
   grub_size_t size = 0;
@@ -393,6 +410,7 @@ grub_cmd_initrd (grub_command_t cmd, int argc, char *argv[])
   if (initrd_mem && grub_errno)
     kernel_free (initrd_mem, size);
 
+#endif
   return grub_errno;
 }
 
@@ -400,6 +418,7 @@ static grub_err_t
 grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
                 int argc, char *argv[])
 {
+#if 0
   grub_file_t file = 0;
   struct linux_i386_kernel_header *lh = NULL;
   grub_ssize_t start, filelen;
@@ -448,6 +467,7 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
     return err;
   grub_dprintf ("linux", "nx is%s supported by this kernel\n",
 		nx_supported ? "" : " not");
+
 
   lh = (struct linux_i386_kernel_header *)kernel;
   grub_dprintf ("linux", "original lh is at %p\n", kernel);
@@ -647,6 +667,72 @@ fail:
   grub_free (kernel);
 
   return grub_errno;
+#else
+  grub_file_t file = 0;
+  struct grub_linuxefi_context *context = 0;
+  grub_ssize_t filelen;
+  void *kernel = NULL;
+  grub_err_t err;
+  int nx_supported = 1;
+
+  grub_dl_ref (my_mod);
+
+  if (argc == 0)
+    {
+      grub_error (GRUB_ERR_BAD_ARGUMENT, N_("filename expected"));
+      goto fail;
+    }
+
+  file = grub_file_open (argv[0], GRUB_FILE_TYPE_LINUX_KERNEL);
+  if (! file)
+    goto fail;
+
+  filelen = grub_file_size (file);
+
+  kernel = grub_malloc(filelen);
+  if (!kernel)
+    {
+      grub_error (GRUB_ERR_OUT_OF_MEMORY, N_("cannot allocate kernel buffer"));
+      goto fail;
+    }
+
+  if (grub_file_read (file, kernel, filelen) != filelen)
+    {
+      grub_error (GRUB_ERR_FILE_READ_ERROR, N_("Can't read kernel %s"),
+                  argv[0]);
+      goto fail;
+    }
+
+  err = grub_efi_check_nx_image_support ((grub_addr_t)kernel, filelen,
+					 &nx_supported);
+  if (err != GRUB_ERR_NONE)
+    return err;
+  grub_dprintf ("linux", "nx is%s supported by this kernel\n",
+		nx_supported ? "" : " not");
+
+  context = grub_zalloc (sizeof (*context));
+  if (!context)
+    goto fail;
+  context->kernel_mem = kernel;
+  context->kernel_size = filelen;
+
+  grub_loader_set_ex (grub_linuxefi_boot, grub_linuxefi_unload, context, 0);
+
+  cmd_initrd->data = context;
+  cmd_initrdefi->data = context;
+
+  return 0;
+
+fail:
+  if (file)
+    grub_file_close (file);
+
+  grub_dl_unref (my_mod);
+  grub_free (context);
+  grub_free (kernel);
+
+  return grub_errno;
+#endif
 }
 
 GRUB_MOD_INIT(linux)
