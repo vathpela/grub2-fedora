@@ -448,6 +448,26 @@ grub_arch_efi_linux_boot_image (grub_addr_t addr, grub_size_t size, char *args,
 				int nx_supported)
 {
   grub_err_t retval;
+  mempath[0].header.type = GRUB_EFI_HARDWARE_DEVICE_PATH_TYPE;
+  mempath[0].header.subtype = GRUB_EFI_MEMORY_MAPPED_DEVICE_PATH_SUBTYPE;
+  mempath[0].header.length = grub_cpu_to_le16_compile_time (sizeof (*mempath));
+  mempath[0].memory_type = GRUB_EFI_LOADER_DATA;
+  mempath[0].start_address = addr;
+  mempath[0].end_address = addr + size;
+
+  mempath[1].header.type = GRUB_EFI_END_DEVICE_PATH_TYPE;
+  mempath[1].header.subtype = GRUB_EFI_END_ENTIRE_DEVICE_PATH_SUBTYPE;
+  mempath[1].header.length = sizeof (grub_efi_device_path_t);
+
+  image_handle = grub_efi_get_last_verified_image_handle ();
+  if (image_handle == NULL)
+    {
+      status = grub_efi_load_image (0, grub_efi_image_handle,
+				    (grub_efi_device_path_t *)mempath,
+				    (void *)addr, size, &image_handle);
+      if (status != GRUB_EFI_SUCCESS)
+	return grub_error (GRUB_ERR_BAD_OS, "cannot load image");
+    }
 
   grub_dprintf ("linux", "linux command line: '%s'\n", args);
 
@@ -730,22 +750,6 @@ grub_cmd_linux (grub_command_t cmd __attribute__ ((unused)),
   int nx_required = 0;
 
   grub_dl_ref (my_mod);
-
-  if (grub_is_shim_lock_enabled () == true)
-    {
-#if defined(__i386__) || defined(__x86_64__)
-      grub_dprintf ("linux", "shim_lock enabled, falling back to legacy Linux kernel loader\n");
-
-      err = grub_cmd_linux_x86_legacy (cmd, argc, argv);
-
-      if (err == GRUB_ERR_NONE)
-	return GRUB_ERR_NONE;
-      else
-	goto fail;
-#else
-      grub_dprintf ("linux", "shim_lock enabled, trying Linux kernel EFI stub loader\n");
-#endif
-    }
 
   if (argc == 0)
     {

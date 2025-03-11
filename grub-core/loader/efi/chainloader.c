@@ -37,6 +37,7 @@
 #include <grub/efi/sb.h>
 #include <grub/efi/linux.h>
 #include <grub/efi/memory.h>
+#include <grub/efi/sb.h>
 #include <grub/command.h>
 #include <grub/i18n.h>
 #include <grub/net.h>
@@ -1131,10 +1132,45 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
       orig_dev = 0;
     }
 
-  if (grub_efi_get_secureboot () == GRUB_EFI_SECUREBOOT_MODE_ENABLED)
+  image_handle = grub_efi_get_last_verified_image_handle ();
+  if (image_handle == NULL)
     {
-      sb_context = grub_malloc (sizeof (*sb_context));
-      if (sb_context == NULL)
+      status = grub_efi_load_image (0, grub_efi_image_handle, file_path,
+				boot_image, size, &image_handle);
+      if (status != GRUB_EFI_SUCCESS)
+	{
+	  if (status == GRUB_EFI_OUT_OF_RESOURCES)
+	    grub_error (GRUB_ERR_OUT_OF_MEMORY, "out of resources");
+	  else
+	    grub_error (GRUB_ERR_BAD_OS, "cannot load image");
+
+	  goto fail;
+	}
+    }
+
+  /* LoadImage does not set a device handler when the image is
+     loaded from memory, so it is necessary to set it explicitly here.
+     This is a mess.  */
+  loaded_image = grub_efi_get_loaded_image (image_handle);
+  if (! loaded_image)
+    {
+      grub_error (GRUB_ERR_BAD_OS, "no loaded image available");
+      goto fail;
+    }
+  loaded_image->device_handle = dev_handle;
+
+  /* Build load options with arguments from chainloader command line. */
+  if (argc > 1)
+    {
+      int i, len;
+      grub_efi_char16_t *p16;
+
+      for (i = 1, len = 0; i < argc; i++)
+        len += grub_strlen (argv[i]) + 1;
+
+      len *= sizeof (grub_efi_char16_t);
+      cmdline = p16 = grub_malloc (len);
+      if (! cmdline)
         goto fail;
       sb_context->address = address;
       sb_context->fsize = fsize;
