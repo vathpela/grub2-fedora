@@ -1190,8 +1190,7 @@ fail:
   if (cmdline)
     grub_free (cmdline);
 
-  if (image_handle != NULL)
-    grub_efi_unload_image (image_handle);
+  grub_efi_unload_image (image_handle);
 
   grub_dl_unref (my_mod);
 
