@@ -27,9 +27,12 @@
 #include <grub/lib/cmdline.h>
 #include <grub/efi/efi.h>
 #include <grub/efi/linux.h>
+#include <grub/efi/sb.h>
 #include <grub/cpu/efi/memory.h>
 #include <grub/tpm.h>
 #include <grub/safemath.h>
+#include <grub/misc.h>
+#include <grub/charset.h>
 
 GRUB_MOD_LICENSE ("GPLv3+");
 
@@ -165,6 +168,7 @@ grub_linuxefi_boot (void *data)
 {
   struct grub_linuxefi_context *context = (struct grub_linuxefi_context *) data;
 
+#if 0
   asm volatile ("cli");
 
   return grub_efi_linux_boot ((grub_addr_t)context->kernel_mem,
@@ -172,6 +176,73 @@ grub_linuxefi_boot (void *data)
 			      context->handover_offset,
 			      context->params,
 			      context->nx_supported);
+#endif
+  grub_efi_memory_mapped_device_path_t *mempath;
+  grub_efi_handle_t image_handle;
+  grub_efi_status_t status;
+  grub_efi_loaded_image_t *loaded_image;
+  int len;
+
+  grub_addr_t addr = (grub_addr_t)context->kernel_mem;
+  grub_size_t size = context->kernel_size;
+  char *args = context->params;
+
+  mempath = grub_malloc (2 * sizeof (grub_efi_memory_mapped_device_path_t));
+  if (!mempath)
+    return grub_errno;
+
+  mempath[0].header.type = GRUB_EFI_HARDWARE_DEVICE_PATH_TYPE;
+  mempath[0].header.subtype = GRUB_EFI_MEMORY_MAPPED_DEVICE_PATH_SUBTYPE;
+  mempath[0].header.length = grub_cpu_to_le16_compile_time (sizeof (*mempath));
+  mempath[0].memory_type = GRUB_EFI_LOADER_DATA;
+  mempath[0].start_address = addr;
+  mempath[0].end_address = addr + size;
+
+  mempath[1].header.type = GRUB_EFI_END_DEVICE_PATH_TYPE;
+  mempath[1].header.subtype = GRUB_EFI_END_ENTIRE_DEVICE_PATH_SUBTYPE;
+  mempath[1].header.length = sizeof (grub_efi_device_path_t);
+
+  image_handle = grub_efi_get_last_verified_image_handle ();
+  if (image_handle == NULL)
+    {
+      status = grub_efi_load_image (0, grub_efi_image_handle,
+				    (grub_efi_device_path_t *)mempath,
+				    (void *)addr, size, &image_handle);
+      if (status != GRUB_EFI_SUCCESS)
+	return grub_error (GRUB_ERR_BAD_OS, "cannot load image");
+    }
+  grub_dprintf ("linux", "linux command line: '%s'\n", args);
+
+  /* Convert command line to UTF-16. */
+  loaded_image = grub_efi_get_loaded_image (image_handle);
+  if (loaded_image == NULL)
+    {
+      grub_error (GRUB_ERR_BAD_FIRMWARE, "missing loaded_image proto");
+      goto unload;
+    }
+  loaded_image->load_options_size = len =
+    (grub_strlen (args) + 1) * sizeof (grub_efi_char16_t);
+  loaded_image->load_options =
+    grub_efi_allocate_any_pages (GRUB_EFI_BYTES_TO_PAGES (len));
+  if (!loaded_image->load_options)
+    return grub_errno;
+
+  loaded_image->load_options_size =
+    2 * grub_utf8_to_utf16 (loaded_image->load_options, len,
+			    (grub_uint8_t *) args, len, NULL);
+
+  grub_dprintf ("linux", "starting image %p\n", image_handle);
+  status = grub_efi_start_image (image_handle, 0, NULL);
+
+  /* When successful, not reached */
+  grub_error (GRUB_ERR_BAD_OS, "start_image() returned 0x%" PRIxGRUB_EFI_UINTN_T, status);
+  grub_efi_free_pages ((grub_addr_t) loaded_image->load_options,
+		       GRUB_EFI_BYTES_TO_PAGES (len));
+  loaded_image->load_options = NULL;
+unload:
+  grub_efi_unload_image (image_handle);
+
+  return grub_errno;
 }
 
 static grub_err_t
