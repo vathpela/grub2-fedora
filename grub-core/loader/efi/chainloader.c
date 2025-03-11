@@ -937,6 +937,7 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   grub_device_t dev = 0;
   grub_device_t orig_dev = 0;
   grub_efi_device_path_t *dp = 0, *file_path = 0;
+  grub_efi_loaded_image_t *loaded_image;
   char *filename;
   void *boot_image = 0;
   grub_efi_physical_address_t address = 0;
@@ -1136,7 +1137,7 @@ grub_cmd_chainloader (grub_command_t cmd __attribute__ ((unused)),
   if (image_handle == NULL)
     {
       status = grub_efi_load_image (0, grub_efi_image_handle, file_path,
-				boot_image, size, &image_handle);
+				boot_image, fsize, &image_handle);
       if (status != GRUB_EFI_SUCCESS)
 	{
 	  if (status == GRUB_EFI_OUT_OF_RESOURCES)
