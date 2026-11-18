@@ -90,6 +90,7 @@ case $dirmode in
     fi
     ;;
   *)
+    # shellcheck disable=SC2174
     if mkdir -m "$dirmode" -p --version . >/dev/null 2>&1 &&
        test ! -d ./--version; then
       echo "mkdir -m $dirmode -p -- $*"
