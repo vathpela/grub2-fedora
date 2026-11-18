@@ -141,6 +141,7 @@ linux_entry ()
       echo "	load_video" | sed "s/^/$submenu_indentation/"
       if grep -qx "CONFIG_FB_EFI=y" "${config}" 2> /dev/null \
 	  && grep -qx "CONFIG_VT_HW_CONSOLE_BINDING=y" "${config}" 2> /dev/null; then
+          # shellcheck disable=SC2016
 	  echo '	if [ "$grub_platform" = efi ]; then' | sed "s/^/$submenu_indentation/"
 	  echo "		set gfxpayload=keep" | sed "s/^/$submenu_indentation/"
 	  echo '	fi' | sed "s/^/$submenu_indentation/"

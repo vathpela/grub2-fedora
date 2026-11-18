@@ -107,6 +107,7 @@ echo
 echo '/*'
 sed -e 's/^/ * /' < $LICENSE | sed -e 's/ $//'
 echo ' *'
+# shellcheck disable=SC2016 # it is confused by multi-line single quotes.
 sed -e 's/^/ * /' < $PEOPLE \
  | grep -v \
   -e 'The underlying `crypto_xof/shake256` software currently includes two' \

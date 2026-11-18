@@ -178,6 +178,7 @@ EOF
 EOF
 
   if [ "$pci_arbiter" = true ] ; then
+    # shellcheck disable=SC2016
     if [ "$acpi" = true ] ; then
       next_task='${acpi-task}'
     elif [ "$rumpdisk" = true ] ; then
@@ -196,6 +197,7 @@ EOF
   fi
 
   if [ "$acpi" = true ] ; then
+    # shellcheck disable=SC2016
     if [ "$rumpdisk" = true ] ; then
       next_task='${disk-task}'
     else
