@@ -28,7 +28,15 @@ datarootdir="@datarootdir@"
 export TEXTDOMAIN=@PACKAGE@
 export TEXTDOMAINDIR="@localedir@"
 
+if [ "$pkgdatadir" = "" ]; then
+  pkgdatadir=.
+fi
 . "$pkgdatadir/grub-mkconfig_lib"
+
+# these come from grub_mkconfig.in but shellcheck needs to be told
+if [ "$grub_probe" = "" ]; then
+  grub_probe="echo"
+fi
 
 if [ "${GRUB_DISABLE_BOOTNEXT}" = "true" ]; then
     exit 0

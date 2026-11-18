@@ -24,7 +24,19 @@ datarootdir="@datarootdir@"
 export TEXTDOMAIN=@PACKAGE@
 export TEXTDOMAINDIR="@localedir@"
 
+if [ "$pkgdatadir" = "" ]; then
+  pkgdatadir=.
+fi
 . "$pkgdatadir/grub-mkconfig_lib"
+
+# these come from grub_mkconfig.in but shellcheck needs to be told
+if [ "$grub_probe" = "" ]; then
+  grub_probe="echo"
+fi
+
+if [ "$grub_tab" = "" ]; then
+  grub_tab="	"
+fi
 
 if [ "x${GRUB_DISABLE_OS_PROBER}" = "xtrue" ]; then
   grub_warn "$(gettext_printf "os-prober will not be executed to detect other bootable partitions.\nSystems on them will not be added to the GRUB boot configuration.\nCheck GRUB_DISABLE_OS_PROBER documentation entry.")"

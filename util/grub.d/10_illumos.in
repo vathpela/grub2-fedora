@@ -20,7 +20,16 @@ set -e
 prefix="@prefix@"
 exec_prefix="@exec_prefix@"
 datarootdir="@datarootdir@"
+
+if [ "$pkgdatadir" = "" ]; then
+  pkgdatadir=.
+fi
 . "$pkgdatadir/grub-mkconfig_lib"
+
+# these come from grub_mkconfig.in but shellcheck does not know
+if [ "$grub_mkrelpath" = "" ]; then
+  grub_mkrelpath="echo"
+fi
 
 export TEXTDOMAIN=@PACKAGE@
 export TEXTDOMAINDIR="@localedir@"

@@ -25,7 +25,15 @@ grub_lang=`echo $LANG | cut -d . -f 1`
 export TEXTDOMAIN=@PACKAGE@
 export TEXTDOMAINDIR="@localedir@"
 
+if [ "$pkgdatadir" = "" ]; then
+  pkgdatadir=.
+fi
 . "$pkgdatadir/grub-mkconfig_lib"
+
+# these come from grub_mkconfig.in but shellcheck does not know
+if [ "$grub_probe" = "" ]; then
+  grub_probe="echo"
+fi
 
 # Do this as early as possible, since other commands might depend on it.
 # (e.g. the `loadfont' command might need lvm or raid modules)

@@ -24,7 +24,15 @@ datarootdir="@datarootdir@"
 export TEXTDOMAIN=@PACKAGE@
 export TEXTDOMAINDIR="@localedir@"
 
+if [ "$pkgdatadir" = "" ]; then
+  pkgdatadir=.
+fi
 . "$pkgdatadir/grub-mkconfig_lib"
+
+# these come from grub_mkconfig.in but shellcheck does not know
+if [ "$grub_probe" = "" ]; then
+  grub_probe="echo"
+fi
 
 osx_entry() {
     if [ x$2 = x32 ]; then
