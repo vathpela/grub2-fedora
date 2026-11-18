@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 SDIR=$(realpath -e "$0")
 SDIR=${SDIR%/*}
 
