@@ -154,7 +154,7 @@ for OS in ${OSPROBED} ; do
   fi
 
   # os-prober returns text string followed by optional counter
-  CLASS="--class $(echo "${LABEL}" | LC_ALL=C sed 's,[[:digit:]]*$,,' | cut -d' ' -f1 | tr 'A-Z' 'a-z' | LC_ALL=C sed 's,[^[:alnum:]_],_,g')"
+  CLASS="--class $(echo "${LABEL}" | LC_ALL=C sed 's,[[:digit:]]*$,,' | cut -d' ' -f1 | tr '[:upper:]' '[:lower:]' | LC_ALL=C sed 's,[^[:alnum:]_],_,g')"
 
   gettext_printf "Found %s on %s\n" "${LONGNAME}" "${DEVICE}" >&2
 

@@ -85,7 +85,7 @@ SELF_VENDORS="`printf '%s\n' \
     "${GRUB_DISTRIBUTOR}" \
     "${GRUB_DISTRIBUTOR%% *}" \
     "${osr_id}" \
-    grub | tr 'A-Z' 'a-z' | grep -v '^$' | awk '!seen[$0]++'`"
+    grub | tr '[:upper:]' '[:lower:]' | grep -v '^$' | awk '!seen[$0]++'`"
 
 # --- PARTUUIDs of the ESPs this install manages ---
 # Any directory carrying one of our \EFI\<vendor>\ subdirectories, drawn from
@@ -114,13 +114,13 @@ SELF_PARTUUIDS="$(
         for d in "${mp}"/[Ee][Ff][Ii]/*/; do
             [ -d "${d}" ] || continue
             v="${d%/}"; v="${v##*/}"
-            v="$(printf '%s' "${v}" | tr 'A-Z' 'a-z')"
+            v="$(printf '%s' "${v}" | tr '[:upper:]' '[:lower:]')"
             if printf '%s\n' "${SELF_VENDORS}" | grep -Fxq -- "${v}"; then
                 "${grub_probe}" --target=partuuid "${mp}" 2>/dev/null || true
                 break
             fi
         done
-    done | tr 'A-Z' 'a-z' | grep -v '^$' | awk '!seen[$0]++'
+    done | tr '[:upper:]' '[:lower:]' | grep -v '^$' | awk '!seen[$0]++'
 )"
 
 # Optionally collect EFI paths from os-prober to filter out non-OS entries
@@ -187,7 +187,7 @@ while IFS="${TAB}" read -r bootnum label devpath; do
     # below keep either from matching an (impossible) empty list line.
     entry_partuuid="`printf '%s' "${devpath}" | \
         sed -n 's|.*HD([0-9]*,GPT,\([0-9A-Fa-f-]\{36\}\),.*|\1|p' | \
-        tr 'A-Z' 'a-z'`"
+        tr '[:upper:]' '[:lower:]'`"
     entry_vendor="`printf '%s' "${efi_file}" | \
         sed -n 's,^/efi/\([^/]*\)/.*,\1,p'`"
     if [ -n "${entry_partuuid}" ] && \
@@ -207,7 +207,7 @@ while IFS="${TAB}" read -r bootnum label devpath; do
             DEVICE="`echo "${OSP}" | cut -d ':' -f 1`"
             BOOT="`echo "${OSP}" | cut -d ':' -f 4`"
             [ "${BOOT}" != "efi" ] && continue
-            osp_efi="`printf '%s' "${DEVICE#*@}" | tr 'A-Z' 'a-z'`"
+            osp_efi="`printf '%s' "${DEVICE#*@}" | tr '[:upper:]' '[:lower:]'`"
             if [ "${efi_file}" = "${osp_efi}" ]; then
                 found=1
                 break
@@ -225,7 +225,7 @@ while IFS="${TAB}" read -r bootnum label devpath; do
     # with trailing digits and non-alnum stripped.
     # e.g. "Windows Boot Manager" -> "windows"
     # Cf. 30_os-prober.in:156
-    CLASS="`printf '%s\n' "${label}" | cut -d' ' -f1 | tr 'A-Z' 'a-z' | \
+    CLASS="`printf '%s\n' "${label}" | cut -d' ' -f1 | tr '[:upper:]' '[:lower:]' | \
         LC_ALL=C sed 's,[[:digit:]]*$,,' | LC_ALL=C sed 's,[^[:alnum:]_],_,g'`"
     [ -z "${CLASS}" ] && CLASS="efi"
     CLASS="--class ${CLASS}"
