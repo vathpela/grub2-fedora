@@ -131,7 +131,7 @@ hurd_entry () {
       fi
       if [ "$oldtitle" = "$GRUB_ACTUAL_DEFAULT" ]; then
 	  quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
-	  title_correction_code="${title_correction_code}if [ \"x\$default\" = '$quoted' ]; then default='$(echo "$replacement_title" | grub_quote)'; fi;"
+	  title_correction_code="${title_correction_code}if [ \"\$default\" = '$quoted' ]; then default='$(echo "$replacement_title" | grub_quote)'; fi;"
 	  grub_warn "$(gettext_printf "Please don't use old title \`%s' for GRUB_DEFAULT, use \`%s' (for versions before 2.00) or \`%s' (for 2.00 or later)" "$GRUB_ACTUAL_DEFAULT" "$replacement_title" "gnuhurd-advanced-$boot_device_id>'gnuhurd-$kernel-$type-$(grub_get_device_id "${GRUB_DEVICE_BOOT}")'")"
       fi
       sed "s/^/$submenu_indentation/" << EOF
