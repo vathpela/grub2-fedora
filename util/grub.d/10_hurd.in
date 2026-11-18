@@ -118,6 +118,9 @@ hurd_entry () {
   kernel="$1"
   type="$2"
   kernel_base="`basename "${kernel}"`"
+  if [ -z "$boot_device_id" ]; then
+      boot_device_id="$(grub_get_device_id "${GRUB_DEVICE}")"
+  fi
 
   if [ "$type" != simple ] ; then
       if [ "$type" = recovery ] ; then
@@ -129,6 +132,7 @@ hurd_entry () {
 	  oldtitle="$OS using $kernel_base"
 	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_ADVANCED_ACCESS_LEVEL")"
       fi
+      replacement_title="$(echo "Advanced options for ${OS}" | sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
       if [ "$oldtitle" = "$GRUB_ACTUAL_DEFAULT" ]; then
 	  quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
 	  title_correction_code="${title_correction_code}if [ \"\$default\" = '$quoted' ]; then default='$(echo "$replacement_title" | grub_quote)'; fi;"
