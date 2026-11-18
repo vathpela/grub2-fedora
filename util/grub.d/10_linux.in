@@ -180,7 +180,7 @@ EOF
     done
     sed "s/^/$submenu_indentation/" << EOF
 	echo	'$(echo "$message" | grub_quote)'
-	initrd	$(echo "$initrd_path")
+	initrd	"$initrd_path"
 EOF
   fi
   sed "s/^/$submenu_indentation/" << EOF
@@ -273,7 +273,7 @@ for linux in ${reverse_sorted_list}; do
     for i in ${initrd}; do
       initrd_display="${initrd_display} ${dirname}/${i}"
     done
-    gettext_printf "Found initrd image: %s\n" "$(echo $initrd_display)" >&2
+    gettext_printf "Found initrd image: %s\n" "$initrd_display" >&2
   fi
 
   config=

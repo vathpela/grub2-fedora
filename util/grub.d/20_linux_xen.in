@@ -183,7 +183,7 @@ EOF
        initrd_path="${rel_dirname}/${i}"
        sed "s/^/$submenu_indentation/" << EOF
 	echo	'$(echo "$message" | grub_quote)'
-	${module_loader}	--nounzip   $(echo $initrd_path)
+	${module_loader}	--nounzip   "$initrd_path"
 EOF
     done
   fi
@@ -341,7 +341,7 @@ for current_xen in ${reverse_sorted_xen_list}; do
 	    for i in ${initrd}; do
 		initrd_display="${initrd_display} ${dirname}/${i}"
 	    done
-	    gettext_printf "Found initrd image: %s\n" "$(echo $initrd_display)" >&2
+	    gettext_printf "Found initrd image: %s\n" "$initrd_display" >&2
 	fi
 
 	if test -z "${initrd_real}"; then
