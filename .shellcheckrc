@@ -16,3 +16,5 @@ disable=SC2012
 # don't complain about unused variables
 disable=SC2034
 
+# don't complain about truncation with >
+disable=SC2188
