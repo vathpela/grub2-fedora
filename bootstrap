@@ -1600,6 +1600,7 @@ export GNULIB_SRCDIR
 export GNULIB_REFDIR
 
 if $pull && { $use_git || test -z "$SKIP_PO"; }; then
+  # shellcheck disable=SC2046 # shellcheck is confused?
   autopull \
       `if $bootstrap_sync; then
          echo ' --bootstrap-sync'
@@ -1613,6 +1614,7 @@ if $pull && { $use_git || test -z "$SKIP_PO"; }; then
 fi
 
 if $gen; then
+  # shellcheck disable=SC2046 # shellcheck is confused?
   autogen \
       `if $copy; then echo ' --copy'; fi` \
       `if test -z "$checkout_only_file"; then echo ' --force'; fi` \
