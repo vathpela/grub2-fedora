@@ -1,0 +1,15 @@
+# don't warn on dynamic path includes
+disable=SC1090
+
+# don't warn on missing path includes
+disable=SC1091
+
+# don't complain about $i instead of i in arithmetic variable operations
+disable=SC2004
+
+# don't complain about backticks instead of $(...)
+disable=SC2006
+
+# don't complain about unused variables
+disable=SC2034
+
