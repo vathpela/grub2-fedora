@@ -103,6 +103,7 @@ fi > header-fixed.bin
 # This require computation in hexadecimal, and GNU awk needs
 # --non-decimal-data option
 #
+# shellcheck disable=SC2086
 COUNT=$($READELF --wide --program-headers $FILE | \
          $AWK $AWK_OPTION \
 "BEGIN { max_offset=0 }
