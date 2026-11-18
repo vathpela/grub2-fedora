@@ -20,17 +20,17 @@ datarootdir="@datarootdir@"
 datadir="@datadir@"
 bindir="@bindir@"
 sbindir="@sbindir@"
-if [ "x$pkgdatadir" = x ]; then
+if [ "$pkgdatadir" = "" ]; then
     pkgdatadir="${datadir}/@PACKAGE@"
 fi
 
-if test "x$grub_probe" = x; then
+if test "$grub_probe" = "" ; then
   grub_probe="${sbindir}/@grub_probe@"
 fi
-if test "x$grub_file" = x; then
+if test "$grub_file" =  "" ; then
   grub_file="${bindir}/@grub_file@"
 fi
-if test "x$grub_mkrelpath" = x; then
+if test "$grub_mkrelpath" = "" ; then
   grub_mkrelpath="${bindir}/@grub_mkrelpath@"
 fi
 
@@ -74,12 +74,12 @@ is_path_readable_by_grub ()
     return 1
   fi
 
-  if [ x$GRUB_ENABLE_CRYPTODISK = xy ]; then
+  if [ $GRUB_ENABLE_CRYPTODISK = y ]; then
       return 0
   fi
   
   for abstraction in $abstractions; do
-      if [ "x$abstraction" = xcryptodisk ]; then
+      if [ "$abstraction" = cryptodisk ]; then
 	  return 1
       fi
   done
@@ -111,7 +111,7 @@ convert_system_path_to_grub_path ()
 
 save_default_entry ()
 {
-  if [ "x${GRUB_SAVEDEFAULT}" = "xtrue" ] ; then
+  if [ "${GRUB_SAVEDEFAULT}" = "true" ] ; then
     cat << EOF
 savedefault
 EOF
@@ -132,7 +132,7 @@ grub_add_module ()
 # of grub.cfg, i.e. before any menu entry can be executed.
 grub_module_is_loaded ()
 {
-  if [ "x${GRUB_DISABLE_MODULE_DEDUPLICATION}" = "xtrue" ]; then
+  if [ "${GRUB_DISABLE_MODULE_DEDUPLICATION}" = "true" ]; then
     return 1
   fi
   if [ -n "${GRUB_MODULE_STATE_FILE}" ] && [ -f "${GRUB_MODULE_STATE_FILE}" ]; then
@@ -159,7 +159,7 @@ grub_toplevel_insmod ()
     return
   fi
   echo "insmod $1"
-  if [ "x${GRUB_DISABLE_MODULE_DEDUPLICATION}" != "xtrue" ]; then
+  if [ "${GRUB_DISABLE_MODULE_DEDUPLICATION}" != "true" ]; then
     if [ -n "${GRUB_MODULE_STATE_FILE}" ]; then
       echo "$1" >> "${GRUB_MODULE_STATE_FILE}"
     fi
@@ -174,7 +174,7 @@ grub_toplevel_insmod ()
 prepare_grub_to_access_device ()
 {
   toplevel=
-  if [ "x$1" = "x--toplevel" ]; then
+  if [ "$1" = "--toplevel" ]; then
     toplevel=y
     shift
   fi
@@ -212,7 +212,7 @@ prepare_grub_to_access_device ()
   done
   unset access_modules toplevel
 
-  if [ x$GRUB_ENABLE_CRYPTODISK = xy ]; then
+  if [ "$GRUB_ENABLE_CRYPTODISK" = y ]; then
       for uuid in `"${grub_probe}" --device $@ --target=cryptodisk_uuid`; do
 	  echo "cryptomount -u $uuid"
       done
@@ -221,12 +221,12 @@ prepare_grub_to_access_device ()
   # If there's a filesystem UUID that GRUB is capable of identifying, use it;
   # otherwise set root as per value in device.map.
   fs_hint="`"${grub_probe}" --device $@ --target=compatibility_hint`"
-  if [ "x$fs_hint" != x ]; then
+  if [ "$fs_hint" != "" ]; then
     echo "set root='$fs_hint'"
   fi
-  if [ "x${GRUB_DISABLE_UUID}" != "xtrue" ] && fs_uuid="`"${grub_probe}" --device $@ --target=fs_uuid 2> /dev/null`" ; then
+  if [ "${GRUB_DISABLE_UUID}" != "true" ] && fs_uuid="`"${grub_probe}" --device $@ --target=fs_uuid 2> /dev/null`" ; then
     hints="`"${grub_probe}" --device $@ --target=hints_string 2> /dev/null`" || hints=
-    if [ "x$hints" != x ]; then
+    if [ "$hints" != "" ]; then
       echo "if [ x\$feature_platform_search_hint = xy ]; then"
       echo "  search --no-floppy --fs-uuid --set=root ${hints} ${fs_uuid}"
       echo "else"
@@ -245,7 +245,7 @@ grub_get_device_id ()
   IFS='
 '
   device="$1"
-  if [ "x${GRUB_DISABLE_UUID}" != "xtrue" ] && fs_uuid="`"${grub_probe}" --device ${device} --target=fs_uuid 2> /dev/null`" ; then
+  if [ "${GRUB_DISABLE_UUID}" != "true" ] && fs_uuid="`"${grub_probe}" --device ${device} --target=fs_uuid 2> /dev/null`" ; then
     echo "$fs_uuid";
   else
     echo $device |sed 's, ,_,g'
@@ -297,16 +297,16 @@ grub_move_to_front ()
 
   item_found=false
   for i in "$@"; do
-    if [ "x$i" = "x$item" ]; then
+    if [ "$i" = "$item" ]; then
       item_found=true
     fi
   done
 
-  if [ "x$item_found" = xtrue ]; then
+  if [ "$item_found" = true ]; then
     echo "$item"
   fi
   for i in "$@"; do
-    if [ "x$i" = "x$item" ]; then
+    if [ "$i" = "$item" ]; then
       continue
     fi
     echo "$i"
@@ -340,7 +340,7 @@ uses_abstraction () {
 
   abstraction="`"${grub_probe}" --device ${device} --target=abstraction`"
   for module in ${abstraction}; do
-    if test "x${module}" = "x$2"; then
+    if test "${module}" = "$2"; then
       IFS="$old_ifs"
       return 0
     fi
@@ -350,7 +350,7 @@ uses_abstraction () {
 }
 
 print_option_help () {
-  if test x$print_option_help_wc = x; then
+  if test "$print_option_help_wc" = "" ; then
       if wc -L  </dev/null > /dev/null 2>&1; then
 	  print_option_help_wc=-L
       elif wc -m  </dev/null > /dev/null 2>&1; then
@@ -359,7 +359,7 @@ print_option_help () {
 	  print_option_help_wc=-b
       fi
   fi
-  if test x$grub_have_fmt = x; then
+  if test "$grub_have_fmt" = ""; then
       if fmt -w 40  </dev/null > /dev/null 2>&1; then
 	  grub_have_fmt=y;
       else
@@ -381,12 +381,12 @@ print_option_help () {
       done
       print_option_help_nl=n
   fi
-  if test x$grub_have_fmt = xy; then
+  if test "$grub_have_fmt" = y; then
       print_option_help_split="$(echo "$2" | fmt -w 50)"
   else
       print_option_help_split="$2"
   fi
-  if test x$print_option_help_nl = xy; then
+  if test "$print_option_help_nl" = y; then
       echo "$print_option_help_split" | awk \
 	  '{ print "                          " $0; }'
   else
@@ -396,7 +396,7 @@ print_option_help () {
 }
 
 grub_fmt () {
-  if test x$grub_have_fmt = x; then
+  if test "$grub_have_fmt" = "" ; then
       if fmt -w 40 < /dev/null > /dev/null; then
 	  grub_have_fmt=y;
       else
@@ -404,7 +404,7 @@ grub_fmt () {
       fi
   fi
 
-  if test x$grub_have_fmt = xy; then
+  if test "$grub_have_fmt" = y; then
       fmt
   else
       cat
@@ -433,12 +433,12 @@ grub_get_auth_user_list () {
       
       # There is no point adding superusers to the user list, they have
       # access to everything anyway
-      if test "x$ggaul_user_access" = "x0"; then
+      if test "$ggaul_user_access" = "0"; then
           continue
       fi
       
       if test $ggaul_user_access -le $ggaul_access_level; then
-          if test "x$ggaul_user_list" = "x"; then
+          if test "$ggaul_user_list" = ""; then
               ggaul_user_list="$ggaul_user_name"
           else
               ggaul_user_list="$ggaul_user_list,$ggaul_user_name"
@@ -446,13 +446,13 @@ grub_get_auth_user_list () {
       fi
   done
   
-  if test "x$ggaul_user_list" != x; then
+  if test "$ggaul_user_list" != ; then
       echo "--users $ggaul_user_list "
   fi
 }
 
 grub_echo_unrestricted_maybe () {
-  if test "x$GRUB_USERS" != "x"; then
+  if test "$GRUB_USERS" != ""; then
     echo "--unrestricted "
   fi
 }

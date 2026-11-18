@@ -5,7 +5,7 @@ exec_prefix="@exec_prefix@"
 bindir="@bindir@"
 datarootdir="@datarootdir@"
 datadir="@datadir@"
-if [ "x$pkgdatadir" = x ]; then
+if [ "$pkgdatadir" = "" ]; then
     pkgdatadir="${datadir}/@PACKAGE@"
 fi
 
@@ -66,7 +66,7 @@ do
     esac
 done
 
-if [ "x${output}" = x ] ; then
+if [ "${output}" = "" ] ; then
   gettext "output file must be specified" >&2
   echo >&2
   usage

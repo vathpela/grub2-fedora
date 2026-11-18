@@ -35,7 +35,7 @@ if [ "$grub_probe" = "" ]; then
 fi
 
 osx_entry() {
-    if [ x$2 = x32 ]; then
+    if [ "$2" = 32 ]; then
         # TRANSLATORS: it refers to kernel architecture (32-bit)
 	bitstr="$(gettext "(32-bit)")"
     else

@@ -25,7 +25,7 @@ PACKAGE_NAME=@PACKAGE_NAME@
 PACKAGE_VERSION=@PACKAGE_VERSION@
 datarootdir="@datarootdir@"
 datadir="@datadir@"
-if [ "x$pkgdatadir" = x ]; then
+if [ "$pkgdatadir" = "" ]; then
     pkgdatadir="${datadir}/@PACKAGE@"
 fi
 
@@ -100,7 +100,7 @@ do
 	exit 1
 	;;
     *)
-	if test "x$entry" != x; then
+	if test "$entry" != "" ; then
 	    gettext "More than one menu entry?" 1>&2
 	    echo >&2
 	    usage
@@ -110,7 +110,7 @@ do
     esac
 done
 
-if test "x$entry" = x; then
+if test "$entry" = "" ; then
     gettext "Menu entry not specified." 1>&2
     echo >&2
     usage

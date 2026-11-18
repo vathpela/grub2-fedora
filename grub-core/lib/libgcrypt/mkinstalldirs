@@ -118,7 +118,7 @@ do
 
   for d
   do
-    test "x$d" = x && continue
+    test "$d" = "" && continue
 
     pathcomp=$pathcomp$d
     case $pathcomp in

@@ -91,8 +91,8 @@ kfreebsd_entry ()
   if [ -z "$boot_device_id" ]; then
       boot_device_id="$(grub_get_device_id "${GRUB_DEVICE}")"
   fi
-  if [ x$type != xsimple ] ; then
-      if [ x$type = xrecovery ] ; then
+  if [ "$type" != simple ] ; then
+      if [ "$type" = recovery ] ; then
 	  title="$(gettext_printf "%s, with kFreeBSD %s (recovery mode)" "${os}" "${version}")"
 	  allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)"
       else
@@ -100,7 +100,7 @@ kfreebsd_entry ()
 	  allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)"
       fi
       replacement_title="$(echo "Advanced options for ${OS}" | sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
-      if [ x"$title" = x"$GRUB_ACTUAL_DEFAULT" ]; then
+      if [ "$title" = "$GRUB_ACTUAL_DEFAULT" ]; then
 	  quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
 	  title_correction_code="${title_correction_code}if [ \"x\$default\" = '$quoted' ]; then default='$(echo "$replacement_title" | grub_quote)'; fi;"
 	  grub_warn "$(gettext_printf "Please don't use old title \`%s' for GRUB_DEFAULT, use \`%s' (for versions before 2.00) or \`%s' (for 2.00 or later)" "$GRUB_ACTUAL_DEFAULT" "$replacement_title" "kfreebsd-advanced-$boot_device_id>kfreebsd-$version-$type-$boot_device_id")"
@@ -110,7 +110,7 @@ kfreebsd_entry ()
       allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
       echo "menuentry '$(echo "$OS" | grub_quote)' ${CLASS} \$menuentry_id_option 'kfreebsd-simple-$boot_device_id' ${allowed_user_list}{" | sed "s/^/$submenu_indentation/"
   fi
-  if [ x$type != xrecovery ] ; then
+  if [ "$type" != recovery ] ; then
       save_default_entry | grub_add_tab | sed "s/^/$submenu_indentation/"
   fi
   if [ -z "${prepare_boot_cache}" ]; then
@@ -150,7 +150,7 @@ EOF
     ;;
   esac
 
-  if [ x${kfreebsd_fs} = xufs ]; then
+  if [ "${kfreebsd_fs}" = ufs ]; then
 	load_kfreebsd_module ${kfreebsd_fs} true | sed "s/^/$submenu_indentation/"
   else
 	load_kfreebsd_module ${kfreebsd_fs} false | sed "s/^/$submenu_indentation/"
@@ -184,7 +184,7 @@ submenu_indentation=""
 
 reverse_sorted_list=$(echo ${list} | tr ' ' '\n' | sed -e 's/\.old$/ 1/; / 1$/! s/$/ 2/' | version_sort -r | sed -e 's/ 1$/.old/; s/ 2$//')
 
-if [ "x$GRUB_TOP_LEVEL" != x ]; then
+if [ "$GRUB_TOP_LEVEL" != "" ]; then
   reverse_sorted_list=$(grub_move_to_front "$GRUB_TOP_LEVEL" ${reverse_sorted_list})
 fi
 
@@ -220,7 +220,7 @@ for kfreebsd in ${reverse_sorted_list}; do
 	  kfreebsd_device=${kfreebsd_fs}id/${GRUB_DEVICE_UUID}
 	  # Debian GNU/kFreeBSD can't remount root if it's supplied as UUID but
 	  # as an UUID
-	  if [ "x${GRUB_DISTRIBUTOR}" = "xDebian" ] \
+	  if [ "${GRUB_DISTRIBUTOR}" = "Debian" ] \
 	      && ! (cat /etc/fstab | awk '!/^[[:space:]]*#/ && $2=="/" { print $1; }' \
 	      | grep "${kfreebsd_fs}id/${GRUB_DEVICE_UUID}" > /dev/null); then
 	      kfreebsd_device=${GRUB_DEVICE} 
@@ -248,11 +248,11 @@ for kfreebsd in ${reverse_sorted_list}; do
   # mentioned in the documentation that has to be set to 'y' instead of 'true' to
   # enable it. This caused a lot of confusion to users that set the option to 'y',
   # 'yes' or 'true'. This was fixed but all of these values must be supported now.
-  if [ "x${GRUB_DISABLE_SUBMENU}" = xyes ] || [ "x${GRUB_DISABLE_SUBMENU}" = xy ]; then
+  if [ "${GRUB_DISABLE_SUBMENU}" = yes ] || [ "${GRUB_DISABLE_SUBMENU}" = y ]; then
       GRUB_DISABLE_SUBMENU="true"
   fi
 
-  if [ "x$is_top_level" = xtrue ] && [ "x${GRUB_DISABLE_SUBMENU}" != xtrue ]; then
+  if [ "$is_top_level" = true ] && [ "${GRUB_DISABLE_SUBMENU}" != true ]; then
       kfreebsd_entry "${OS}" "${version}" simple
       submenu_indentation="$grub_tab"
     
@@ -265,14 +265,14 @@ for kfreebsd in ${reverse_sorted_list}; do
   fi
 
   kfreebsd_entry "${OS}" "${version}" advanced
-  if [ "x${GRUB_DISABLE_RECOVERY}" != "xtrue" ]; then
+  if [ "${GRUB_DISABLE_RECOVERY}" != "true" ]; then
     kfreebsd_entry "${OS}" "${version}" recovery "-s"
   fi
 done
 
 # If at least one kernel was found, then we need to
 # add a closing '}' for the submenu command.
-if [ x"$is_top_level" != xtrue ]; then
+if [ "$is_top_level" != true ]; then
   echo '}'
 fi
 

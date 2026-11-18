@@ -38,7 +38,7 @@ if [ "$grub_tab" = "" ]; then
   grub_tab="	"
 fi
 
-if [ "x${GRUB_DISABLE_OS_PROBER}" = "xtrue" ]; then
+if [ "${GRUB_DISABLE_OS_PROBER}" = "true" ]; then
   grub_warn "$(gettext_printf "os-prober will not be executed to detect other bootable partitions.\nSystems on them will not be added to the GRUB boot configuration.\nCheck GRUB_DISABLE_OS_PROBER documentation entry.")"
   exit 0
 fi
@@ -57,7 +57,7 @@ if [ -z "${OSPROBED}" ] ; then
 fi
 
 osx_entry() {
-    if [ x$2 = x32 ]; then
+    if [ "$2" = "32" ]; then
         # TRANSLATORS: it refers to kernel architecture (32-bit)
 	bitstr="$(gettext "(32-bit)")"
     else
@@ -126,7 +126,7 @@ EOF
 
 used_osprober_linux_ids=
 
-if [ "x$GRUB_TOP_LEVEL_OS_PROBER" != x ]; then
+if [ "$GRUB_TOP_LEVEL_OS_PROBER" != "" ]; then
   OSPROBED=$(grub_move_to_front "$GRUB_TOP_LEVEL_OS_PROBER" ${OSPROBED})
 fi
 
@@ -143,7 +143,7 @@ for OS in ${OSPROBED} ; do
   if [ -n "${GRUB_OS_PROBER_SKIP_LIST}" ] && UUID="`${grub_probe} --target=fs_uuid --device ${DEVICE%@*}`"; then
     SPACE='[[:space:],;]' # regex matching spaces and common separators
 
-    if [ x"${DEVICE##*@*}" = x ] ; then
+    if [ "${DEVICE##*@*}" = "" ] ; then
       EXPUUID="$UUID@${DEVICE#*@}"
     else
       EXPUUID="$UUID(@/dev/.*)?"
@@ -156,7 +156,7 @@ for OS in ${OSPROBED} ; do
   fi
 
   BTRFS="`echo ${OS} | cut -d ':' -f 5`"
-  if [ "x$BTRFS" = "xbtrfs" ]; then
+  if [ "$BTRFS" = "btrfs" ]; then
 	BTRFSuuid="`echo ${OS} | cut -d ':' -f 6`"
 	BTRFSsubvol="`echo ${OS} | cut -d ':' -f 7`"
   fi
@@ -183,7 +183,7 @@ EOF
       save_default_entry | grub_add_tab
       prepare_grub_to_access_device ${DEVICE} | grub_add_tab
 
-      if [ x"`${grub_probe} --device ${DEVICE} --target=partmap`" = xmsdos ]; then
+      if [ "`${grub_probe} --device ${DEVICE} --target=partmap`" = msdos ]; then
 	  cat << EOF
 	parttool \${root} hidden-
 EOF
@@ -226,7 +226,7 @@ fi
 EOF
     ;;
     linux)
-      if [ "x$BTRFS" = "xbtrfs" ]; then
+      if [ "$BTRFS" = "btrfs" ]; then
          LINUXPROBED="`linux-boot-prober btrfs ${BTRFSuuid} ${BTRFSsubvol}  2> /dev/null | tr ' ' '^' | paste -s -d ' '`"
       else
          LINUXPROBED="`linux-boot-prober ${DEVICE} 2> /dev/null | tr ' ' '^' | paste -s -d ' '`"
@@ -273,11 +273,11 @@ EOF
 	# mentioned in the documentation that has to be set to 'y' instead of 'true' to
 	# enable it. This caused a lot of confusion to users that set the option to 'y',
 	# 'yes' or 'true'. This was fixed but all of these values must be supported now.
-	if [ "x${GRUB_DISABLE_SUBMENU}" = xyes ] || [ "x${GRUB_DISABLE_SUBMENU}" = xy ]; then
+	if [ "${GRUB_DISABLE_SUBMENU}" = yes ] || [ "${GRUB_DISABLE_SUBMENU}" = y ]; then
 	    GRUB_DISABLE_SUBMENU="true"
 	fi
 
-	if [ "x$is_top_level" = xtrue ] && [ "x${GRUB_DISABLE_SUBMENU}" != xtrue ]; then
+	if [ "$is_top_level" = true ] && [ "${GRUB_DISABLE_SUBMENU}" != true ]; then
             allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
             cat << EOF
 menuentry '$(echo "$OS $onstr" | grub_quote)' $CLASS --class gnu-linux --class gnu --class os \$menuentry_id_option 'osprober-gnulinux-simple-$boot_device_id' ${allowed_user_list}{
@@ -317,14 +317,14 @@ EOF
         cat << EOF
 	}
 EOF
-	if [ x"$title" = x"$GRUB_ACTUAL_DEFAULT" ] || [ x"Previous Linux versions>$title" = x"$GRUB_ACTUAL_DEFAULT" ]; then
+	if [ "$title" = "$GRUB_ACTUAL_DEFAULT" ] || [ "Previous Linux versions>$title" = "$GRUB_ACTUAL_DEFAULT" ]; then
 	    replacement_title="$(echo "Advanced options for ${OS} $onstr" | sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
 	    quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
 	    title_correction_code="${title_correction_code}if [ \"x\$default\" = '$quoted' ]; then default='$(echo "$replacement_title" | grub_quote)'; fi;"
 	    grub_warn "$(gettext_printf "Please don't use old title \`%s' for GRUB_DEFAULT, use \`%s' (for versions before 2.00) or \`%s' (for 2.00 or later)" "$GRUB_ACTUAL_DEFAULT" "$replacement_title" "gnulinux-advanced-$boot_device_id>gnulinux-$version-$type-$boot_device_id")"
 	fi
       done
-      if [ x"$is_top_level" != xtrue ]; then
+      if [ "$is_top_level" != true ]; then
 	  echo '}'
       fi
       echo "$title_correction_code"

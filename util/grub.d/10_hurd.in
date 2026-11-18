@@ -36,7 +36,7 @@ fi
 
 CLASS="--class gnu --class os"
 
-if [ "x${GRUB_DISTRIBUTOR}" = "x" ] ; then
+if [ "${GRUB_DISTRIBUTOR}" = "" ] ; then
   OS=GNU
 else
   OS="${GRUB_DISTRIBUTOR} GNU/Hurd"
@@ -119,8 +119,8 @@ hurd_entry () {
   type="$2"
   kernel_base="`basename "${kernel}"`"
 
-  if [ x$type != xsimple ] ; then
-      if [ x$type = xrecovery ] ; then
+  if [ "$type" != simple ] ; then
+      if [ "$type" = recovery ] ; then
 	  title="$(gettext_printf "%s, with Hurd %s (recovery mode)" "${OS}" "${kernel_base}")"
 	  oldtitle="$OS using $kernel_base (recovery mode)"
 	  allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)"
@@ -129,7 +129,7 @@ hurd_entry () {
 	  oldtitle="$OS using $kernel_base"
 	  allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)"
       fi
-      if [ x"$oldtitle" = x"$GRUB_ACTUAL_DEFAULT" ]; then
+      if [ "$oldtitle" = "$GRUB_ACTUAL_DEFAULT" ]; then
 	  quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
 	  title_correction_code="${title_correction_code}if [ \"x\$default\" = '$quoted' ]; then default='$(echo "$replacement_title" | grub_quote)'; fi;"
 	  grub_warn "$(gettext_printf "Please don't use old title \`%s' for GRUB_DEFAULT, use \`%s' (for versions before 2.00) or \`%s' (for 2.00 or later)" "$GRUB_ACTUAL_DEFAULT" "$replacement_title" "gnuhurd-advanced-$boot_device_id>'gnuhurd-$kernel-$type-$(grub_get_device_id "${GRUB_DEVICE_BOOT}")'")"
@@ -147,7 +147,7 @@ EOF
   prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | grub_add_tab|sed "s/^/$submenu_indentation/"
   message="$(gettext_printf "Loading GNU Mach ...")"
 
-  if [ x$type = xrecovery ] ; then
+  if [ "$type" = recovery ] ; then
       opts="-s"
   else
       opts=
@@ -159,12 +159,12 @@ EOF
 	multiboot	${kernel} root=$device $opts ${GRUB_CMDLINE_GNUMACH}
 EOF
 
-  if [ x$type != xrecovery ] ; then
+  if [ "$type" != recovery ] ; then
       save_default_entry | grub_add_tab| sed "s/^/$submenu_indentation/"
   fi
   prepare_grub_to_access_device "${GRUB_DEVICE}" | grub_add_tab| sed "s/^/$submenu_indentation/"
   message="$(gettext_printf "Loading the Hurd ...")"
-  if [ x$type = xrecovery ] ; then
+  if [ "$type" = recovery ] ; then
       opts=
   else
       opts="--readonly"
@@ -247,7 +247,7 @@ submenu_indentation=""
 
 reverse_sorted_kernels=$(echo ${kernels} | tr ' ' '\n' | sed -e 's/\.old$/ 1/; / 1$/! s/$/ 2/' | version_sort -r | sed -e 's/ 1$/.old/; s/ 2$//')
 
-if [ "x$GRUB_TOP_LEVEL" != x ]; then
+if [ "$GRUB_TOP_LEVEL" != "" ]; then
   reverse_sorted_kernels=$(grub_move_to_front "$GRUB_TOP_LEVEL" ${reverse_sorted_kernels})
 fi
 
@@ -258,11 +258,11 @@ for kernel in ${reverse_sorted_kernels}; do
   # mentioned in the documentation that has to be set to 'y' instead of 'true' to
   # enable it. This caused a lot of confusion to users that set the option to 'y',
   # 'yes' or 'true'. This was fixed but all of these values must be supported now.
-  if [ "x${GRUB_DISABLE_SUBMENU}" = xyes ] || [ "x${GRUB_DISABLE_SUBMENU}" = xy ]; then
+  if [ "${GRUB_DISABLE_SUBMENU}" = yes ] || [ "${GRUB_DISABLE_SUBMENU}" = y ]; then
       GRUB_DISABLE_SUBMENU="true"
   fi
 
-  if [ "x$is_top_level" = xtrue ] && [ "x${GRUB_DISABLE_SUBMENU}" != xtrue ]; then
+  if [ "$is_top_level" = true ] && [ "${GRUB_DISABLE_SUBMENU}" != true ]; then
       hurd_entry "$kernel" simple
       submenu_indentation="$grub_tab"
     
@@ -277,7 +277,7 @@ done
 
 # If at least one kernel was found, then we need to
 # add a closing '}' for the submenu command.
-if [ x"$is_top_level" != xtrue ]; then
+if [ "$is_top_level" != true ]; then
   echo '}'
 fi
 

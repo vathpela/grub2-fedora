@@ -38,7 +38,7 @@ fi
 export TEXTDOMAIN=@PACKAGE@
 export TEXTDOMAINDIR="@localedir@"
 
-if [ "x${GRUB_DISTRIBUTOR}" = "x" ] ; then
+if [ "${GRUB_DISTRIBUTOR}" = "" ] ; then
   OS="NetBSD"
 else
   OS="${GRUB_DISTRIBUTOR} NetBSD"
@@ -113,8 +113,8 @@ netbsd_entry ()
       boot_device_id="$(grub_get_device_id "${GRUB_DEVICE}")"
   fi
 
-  if [ x$type != xsimple ] ; then
-      if [ x$type = xrecovery ] ; then
+  if [ "$type" != simple ] ; then
+      if [ "$type" = recovery ] ; then
 	  title="$(gettext_printf "%s, with kernel %s (via %s, recovery mode)" "${OS}" "$(echo ${kernel} | sed -e 's,^.*/,,')" "${loader}")"
 	  allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)"
       else
@@ -122,7 +122,7 @@ netbsd_entry ()
 	  allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)"
       fi
       replacement_title="$(echo "Advanced options for ${OS}" | sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
-      if [ x"$title" = x"$GRUB_ACTUAL_DEFAULT" ]; then
+      if [ "$title" = "$GRUB_ACTUAL_DEFAULT" ]; then
 	  quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
 	  title_correction_code="${title_correction_code}if [ \"x\$default\" = '$quoted' ]; then default='$(echo "$replacement_title" | grub_quote)'; fi;"
 	  grub_warn "$(gettext_printf "Please don't use old title \`%s' for GRUB_DEFAULT, use \`%s' (for versions before 2.00) or \`%s' (for 2.00 or later)" "$GRUB_ACTUAL_DEFAULT" "$replacement_title" "netbsd-advanced-$boot_device_id>netbsd-${loader}-$kernel-$type-$boot_device_id")"
@@ -164,7 +164,7 @@ submenu_indentation=""
 
 list="/netbsd $(ls -t /netbsd?* 2>/dev/null)"
 
-if [ "x$GRUB_TOP_LEVEL" != x ]; then
+if [ "$GRUB_TOP_LEVEL" != "" ]; then
   list=$(grub_move_to_front "$GRUB_TOP_LEVEL" ${list})
 fi
 
@@ -183,11 +183,11 @@ for k in ${list}; do
   # mentioned in the documentation that has to be set to 'y' instead of 'true' to
   # enable it. This caused a lot of confusion to users that set the option to 'y',
   # 'yes' or 'true'. This was fixed but all of these values must be supported now.
-  if [ "x${GRUB_DISABLE_SUBMENU}" = xyes ] || [ "x${GRUB_DISABLE_SUBMENU}" = xy ]; then
+  if [ "${GRUB_DISABLE_SUBMENU}" = yes ] || [ "${GRUB_DISABLE_SUBMENU}" = y ]; then
     GRUB_DISABLE_SUBMENU="true"
   fi
 
-  if [ "x$is_top_level" = xtrue ] && [ "x${GRUB_DISABLE_SUBMENU}" != xtrue ]; then
+  if [ "$is_top_level" = true ] && [ "${GRUB_DISABLE_SUBMENU}" != true ]; then
       netbsd_entry "knetbsd"   "$k" simple "${GRUB_CMDLINE_NETBSD_DEFAULT}"
     submenu_indentation="$grub_tab"
     
@@ -201,7 +201,7 @@ for k in ${list}; do
 
   netbsd_entry "knetbsd"   "$k" advanced "${GRUB_CMDLINE_NETBSD_DEFAULT}"
   netbsd_entry "multiboot" "$k" advanced "${GRUB_CMDLINE_NETBSD_DEFAULT}"
-  if [ "x${GRUB_DISABLE_RECOVERY}" != "xtrue" ]; then
+  if [ "${GRUB_DISABLE_RECOVERY}" != "true" ]; then
     netbsd_entry "knetbsd"   "$k" recovery "-s"
     netbsd_entry "multiboot" "$k" recovery "-s"
   fi
@@ -209,7 +209,7 @@ done
 
 # If at least one kernel was found, then we need to
 # add a closing '}' for the submenu command.
-if [ x"$is_top_level" != xtrue ]; then
+if [ "$is_top_level" != true ]; then
   echo '}'
 fi
 

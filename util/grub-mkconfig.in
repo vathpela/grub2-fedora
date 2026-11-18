@@ -30,7 +30,7 @@ PACKAGE_NAME=@PACKAGE_NAME@
 PACKAGE_VERSION=@PACKAGE_VERSION@
 host_os=@host_os@
 datadir="@datadir@"
-if [ "x$pkgdatadir" = x ]; then
+if [ "$pkgdatadir" = "" ]; then
     pkgdatadir="${datadir}/@PACKAGE@"
 fi
 # export it for scripts
@@ -102,7 +102,7 @@ do
     esac
 done
 
-if [ "x$EUID" = "x" ] ; then
+if [ "$EUID" = "" ] ; then
   EUID=`id -u`
 fi
 
@@ -147,13 +147,13 @@ GRUB_DISABLE_OS_PROBER="true"
 # choosing Hurd filesystem module.
 GRUB_FS="`${grub_probe} --device ${GRUB_DEVICE} --target=fs 2> /dev/null || echo unknown`"
 
-if [ x"$GRUB_FS" = xunknown ]; then
+if [ "$GRUB_FS" = unknown ]; then
     GRUB_FS="$(stat -f -c %T / || echo unknown)"
 fi
 
 # Provide a default set of stock linux early initrd images.
 # Define here so the list can be modified in the sourced config file.
-if [ "x${GRUB_EARLY_INITRD_LINUX_STOCK}" = "x" ]; then
+if [ "${GRUB_EARLY_INITRD_LINUX_STOCK}" = "" ]; then
 	GRUB_EARLY_INITRD_LINUX_STOCK="intel-uc.img intel-ucode.img amd-uc.img amd-ucode.img early_ucode.cpio microcode.cpio"
 fi
 
@@ -161,7 +161,7 @@ if test -f ${sysconfdir}/default/grub ; then
   . ${sysconfdir}/default/grub
 fi
 
-if [ "x${GRUB_DISABLE_UUID}" = "xtrue" ]; then
+if [ "${GRUB_DISABLE_UUID}" = "true" ]; then
   if [ -z "${GRUB_DISABLE_LINUX_UUID}" ]; then
     GRUB_DISABLE_LINUX_UUID="true"
   fi
@@ -171,13 +171,13 @@ if [ "x${GRUB_DISABLE_UUID}" = "xtrue" ]; then
 fi
 
 # XXX: should this be deprecated at some point?
-if [ "x${GRUB_TERMINAL}" != "x" ] ; then
+if [ "${GRUB_TERMINAL}" != "" ] ; then
   GRUB_TERMINAL_INPUT="${GRUB_TERMINAL}"
   GRUB_TERMINAL_OUTPUT="${GRUB_TERMINAL}"
 fi
 
 termoutdefault=0
-if [ "x${GRUB_TERMINAL_OUTPUT}" = "x" ]; then
+if [ "${GRUB_TERMINAL_OUTPUT}" = "" ]; then
     GRUB_TERMINAL_OUTPUT=gfxterm;
     termoutdefault=1;
 fi
@@ -194,7 +194,7 @@ done
 
 GRUB_ACTUAL_DEFAULT="$GRUB_DEFAULT"
 
-if [ "x${GRUB_ACTUAL_DEFAULT}" = "xsaved" ] ; then GRUB_ACTUAL_DEFAULT="`"${grub_editenv}" - list | sed -n '/^saved_entry=/ s,^saved_entry=,,p'`" ; fi
+if [ "${GRUB_ACTUAL_DEFAULT}" = "saved" ] ; then GRUB_ACTUAL_DEFAULT="`"${grub_editenv}" - list | sed -n '/^saved_entry=/ s,^saved_entry=,,p'`" ; fi
 
 # We have to be careful here to not break existing password-protected setups.
 # The "Authentication and authorization" section of the GRUB manual documents
@@ -206,10 +206,10 @@ if [ "x${GRUB_ACTUAL_DEFAULT}" = "xsaved" ] ; then GRUB_ACTUAL_DEFAULT="`"${grub
 # in GRUB_USERS and does not configure any grub.d scripts to use access levels
 # other than 0, all boot entries will require the superuser password to
 # access.
-if [ "x${GRUB_UNRESTRICTED_ACCESS_LEVEL}" = "x" ] ; then GRUB_UNRESTRICTED_ACCESS_LEVEL="1" ; fi
-if [ "x${GRUB_SIMPLE_ACCESS_LEVEL}" = "x" ] ; then GRUB_SIMPLE_ACCESS_LEVEL="0" ; fi
-if [ "x${GRUB_ADVANCED_ACCESS_LEVEL}" = "x" ] ; then GRUB_ADVANCED_ACCESS_LEVEL="0" ; fi
-if [ "x${GRUB_RECOVERY_ACCESS_LEVEL}" = "x" ] ; then GRUB_RECOVERY_ACCESS_LEVEL="0" ; fi
+if [ "${GRUB_UNRESTRICTED_ACCESS_LEVEL}" = "" ] ; then GRUB_UNRESTRICTED_ACCESS_LEVEL="1" ; fi
+if [ "${GRUB_SIMPLE_ACCESS_LEVEL}" = "" ] ; then GRUB_SIMPLE_ACCESS_LEVEL="0" ; fi
+if [ "${GRUB_ADVANCED_ACCESS_LEVEL}" = "" ] ; then GRUB_ADVANCED_ACCESS_LEVEL="0" ; fi
+if [ "${GRUB_RECOVERY_ACCESS_LEVEL}" = "" ] ; then GRUB_RECOVERY_ACCESS_LEVEL="0" ; fi
 
 
 # These are defined in this script, export them here so that user can
@@ -281,7 +281,7 @@ export GRUB_DEFAULT \
   GRUB_BOOTNEXT_OMIT_INACTIVE \
   GRUB_DISABLE_MODULE_DEDUPLICATION
 
-if test "x${grub_cfg}" != "x"; then
+if test "${grub_cfg}" != ""; then
   rm -f "${grub_cfg}.new.$$"
   oldumask=$(umask); umask 077
   exec > "${grub_cfg}.new.$$"
@@ -301,8 +301,8 @@ EOF
 
 # Track modules loaded unconditionally at the top level of grub.cfg
 # in a state file so that following scripts can omit them.
-if [ "x${GRUB_DISABLE_MODULE_DEDUPLICATION}" != "xtrue" ]; then
-  if test "x${grub_cfg}" != "x"; then
+if [ "${GRUB_DISABLE_MODULE_DEDUPLICATION}" != "true" ]; then
+  if test "${grub_cfg}" != ""; then
     GRUB_MODULE_STATE_FILE="${grub_cfg}.modules"
     rm -f "${GRUB_MODULE_STATE_FILE}"
   elif GRUB_MODULE_STATE_FILE="`mktemp "${TMPDIR:-/tmp}/grub-mkconfig-modules.XXXXXXXXXX" 2>/dev/null`"; then
@@ -359,7 +359,7 @@ sync_fs_journal () {
   grub_cfg_rel_path="/boot/@grubdirname@/grub.cfg"
   mount_point="/"
 
-  if test "x$GRUB_DEVICE" != "x$GRUB_DEVICE_BOOT"; then
+  if test "$GRUB_DEVICE" != "$GRUB_DEVICE_BOOT"; then
     boot_fs="`${grub_probe} --device "${GRUB_DEVICE_BOOT}" --target=fs 2> /dev/null || echo unknown`"
     grub_cfg_rel_path="/@grubdirname@/grub.cfg"
     mount_point="/boot"
@@ -372,7 +372,7 @@ sync_fs_journal () {
   fi
 } >&2
 
-if test "x${grub_cfg}" != "x" ; then
+if test "${grub_cfg}" != "" ; then
   if ! ${grub_script_check} "${grub_cfg}".new.$$; then
     # TRANSLATORS: %s is replaced by filename
     gettext_printf "Syntax errors are detected in generated GRUB config file.
