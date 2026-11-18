@@ -56,7 +56,7 @@ cat <<EOF
     {
 EOF
 
-(while read LINE; do echo $LINE; done) \
+(while read -r LINE; do echo $LINE; done) \
   | grep -v '^#' \
   | sed -n \
         -e '/EXPORT_FUNC *([a-zA-Z0-9_]*)/{s/.*EXPORT_FUNC *(\([a-zA-Z0-9_]*\)).*/      {"\1", \1, 1},/;p;}' \

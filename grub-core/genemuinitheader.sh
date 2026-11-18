@@ -41,7 +41,7 @@ void grub_init_all (void);
 void grub_fini_all (void);
 EOF
 
-read mods
+read -r mods
 for line in $mods; do
   if ${nm} --defined-only -P -p ${line} | grep grub_mod_init > /dev/null; then
       echo "void grub_${line%%.*}_init (void);"
