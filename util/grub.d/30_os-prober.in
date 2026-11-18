@@ -66,12 +66,12 @@ osx_entry() {
     fi
     # TRANSLATORS: it refers on the OS residing on device %s
     onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
-        allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+        allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
         cat << EOF
 menuentry '$(echo "${LONGNAME} $bitstr $onstr" | grub_quote)' --class osx --class darwin --class os \$menuentry_id_option 'osprober-xnu-$2-$(grub_get_device_id "${DEVICE}")'  ${allowed_user_list}{
 EOF
 	save_default_entry | grub_add_tab
-	prepare_grub_to_access_device ${DEVICE} | grub_add_tab
+	prepare_grub_to_access_device "${DEVICE}" | grub_add_tab
 	cat << EOF
         load_video
         set do_resume=0
@@ -127,7 +127,7 @@ EOF
 used_osprober_linux_ids=
 
 if [ "$GRUB_TOP_LEVEL_OS_PROBER" != "" ]; then
-  OSPROBED=$(grub_move_to_front "$GRUB_TOP_LEVEL_OS_PROBER" ${OSPROBED})
+  OSPROBED=$(grub_move_to_front "$GRUB_TOP_LEVEL_OS_PROBER" "${OSPROBED}")
 fi
 
 case "$GRUB_OS_PROBER_SKIP_LIST" in *@/[dD][eE][vV]/*)
@@ -135,12 +135,12 @@ case "$GRUB_OS_PROBER_SKIP_LIST" in *@/[dD][eE][vV]/*)
 esac
 
 for OS in ${OSPROBED} ; do
-  DEVICE="`echo ${OS} | cut -d ':' -f 1`"
-  LONGNAME="`echo ${OS} | cut -d ':' -f 2 | tr '^' ' '`"
-  LABEL="`echo ${OS} | cut -d ':' -f 3 | tr '^' ' '`"
-  BOOT="`echo ${OS} | cut -d ':' -f 4`"
+  DEVICE="`echo "${OS}" | cut -d ':' -f 1`"
+  LONGNAME="`echo "${OS}" | cut -d ':' -f 2 | tr '^' ' '`"
+  LABEL="`echo "${OS}" | cut -d ':' -f 3 | tr '^' ' '`"
+  BOOT="`echo "${OS}" | cut -d ':' -f 4`"
   unset UUID
-  if [ -n "${GRUB_OS_PROBER_SKIP_LIST}" ] && UUID="`${grub_probe} --target=fs_uuid --device ${DEVICE%@*}`"; then
+  if [ -n "${GRUB_OS_PROBER_SKIP_LIST}" ] && UUID="`${grub_probe} --target=fs_uuid --device "${DEVICE%@*}"`"; then
     SPACE='[[:space:],;]' # regex matching spaces and common separators
 
     if [ "${DEVICE##*@*}" = "" ] ; then
@@ -155,10 +155,10 @@ for OS in ${OSPROBED} ; do
     fi
   fi
 
-  BTRFS="`echo ${OS} | cut -d ':' -f 5`"
+  BTRFS="`echo "${OS}" | cut -d ':' -f 5`"
   if [ "$BTRFS" = "btrfs" ]; then
-	BTRFSuuid="`echo ${OS} | cut -d ':' -f 6`"
-	BTRFSsubvol="`echo ${OS} | cut -d ':' -f 7`"
+	BTRFSuuid="`echo "${OS}" | cut -d ':' -f 6`"
+	BTRFSsubvol="`echo "${OS}" | cut -d ':' -f 7`"
   fi
 
   if [ -z "${LONGNAME}" ] ; then
@@ -174,16 +174,16 @@ for OS in ${OSPROBED} ; do
     chain)
 
 	  onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
       cat << EOF
 # This menu entry is supported only on PC BIOS platforms.
 if [ "\$grub_platform" = "pc" ]; then
 menuentry '$(echo "${LONGNAME} $onstr" | grub_quote)' $CLASS --class os \$menuentry_id_option 'osprober-chain-$(grub_get_device_id "${DEVICE}")' ${allowed_user_list}{
 EOF
       save_default_entry | grub_add_tab
-      prepare_grub_to_access_device ${DEVICE} | grub_add_tab
+      prepare_grub_to_access_device "${DEVICE}" | grub_add_tab
 
-      if [ "`${grub_probe} --device ${DEVICE} --target=partmap`" = msdos ]; then
+      if [ "`${grub_probe} --device "${DEVICE}" --target=partmap`" = msdos ]; then
 	  cat << EOF
 	parttool \${root} hidden-
 EOF
@@ -210,14 +210,14 @@ EOF
 	EFIPATH=${DEVICE#*@}
 	DEVICE=${DEVICE%@*}
 	onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
-	allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+	allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
       cat << EOF
 # This menu entry is supported only on EFI platforms.
 if [ "\$grub_platform" = "efi" ]; then
 menuentry '$(echo "${LONGNAME} $onstr" | grub_quote)' $CLASS --class os \$menuentry_id_option 'osprober-efi-$(grub_get_device_id "${DEVICE}")' ${allowed_user_list}{
 EOF
       save_default_entry | sed -e "s/^/\t/"
-      prepare_grub_to_access_device ${DEVICE} | sed -e "s/^/\t/"
+      prepare_grub_to_access_device "${DEVICE}" | sed -e "s/^/\t/"
 
       cat <<EOF
 	chainloader ${EFIPATH}
@@ -227,9 +227,9 @@ EOF
     ;;
     linux)
       if [ "$BTRFS" = "btrfs" ]; then
-         LINUXPROBED="`linux-boot-prober btrfs ${BTRFSuuid} ${BTRFSsubvol}  2> /dev/null | tr ' ' '^' | paste -s -d ' '`"
+         LINUXPROBED="`linux-boot-prober btrfs "${BTRFSuuid}" "${BTRFSsubvol}"  2> /dev/null | tr ' ' '^' | paste -s -d ' '`"
       else
-         LINUXPROBED="`linux-boot-prober ${DEVICE} 2> /dev/null | tr ' ' '^' | paste -s -d ' '`"
+         LINUXPROBED="`linux-boot-prober "${DEVICE}" 2> /dev/null | tr ' ' '^' | paste -s -d ' '`"
       fi
       prepare_boot_cache=
       boot_device_id=
@@ -238,12 +238,12 @@ EOF
       OS="${LONGNAME}"
 
       for LINUX in ${LINUXPROBED} ; do
-        LROOT="`echo ${LINUX} | cut -d ':' -f 1`"
-        LBOOT="`echo ${LINUX} | cut -d ':' -f 2`"
-        LLABEL="`echo ${LINUX} | cut -d ':' -f 3 | tr '^' ' '`"
-        LKERNEL="`echo ${LINUX} | cut -d ':' -f 4`"
-        LINITRD="`echo ${LINUX} | cut -d ':' -f 5 | tr '^' ' '`"
-        LPARAMS="`echo ${LINUX} | cut -d ':' -f 6- | tr '^' ' '`"
+        LROOT="`echo "${LINUX}" | cut -d ':' -f 1`"
+        LBOOT="`echo "${LINUX}" | cut -d ':' -f 2`"
+        LLABEL="`echo "${LINUX}" | cut -d ':' -f 3 | tr '^' ' '`"
+        LKERNEL="`echo "${LINUX}" | cut -d ':' -f 4`"
+        LINITRD="`echo "${LINUX}" | cut -d ':' -f 5 | tr '^' ' '`"
+        LPARAMS="`echo "${LINUX}" | cut -d ':' -f 6- | tr '^' ' '`"
 
         if [ -z "${LLABEL}" ] ; then
           LLABEL="${LONGNAME}"
@@ -266,7 +266,7 @@ EOF
 	used_osprober_linux_ids="$used_osprober_linux_ids 'osprober-gnulinux-$LKERNEL-${recovery_params}-$counter-$boot_device_id'"
 
 	if [ -z "${prepare_boot_cache}" ]; then
-	  prepare_boot_cache="$(prepare_grub_to_access_device ${LBOOT} | grub_add_tab)"
+	  prepare_boot_cache="$(prepare_grub_to_access_device "${LBOOT}" | grub_add_tab)"
 	fi
 
 	# The GRUB_DISABLE_SUBMENU option used to be different than others since it was
@@ -278,7 +278,7 @@ EOF
 	fi
 
 	if [ "$is_top_level" = true ] && [ "${GRUB_DISABLE_SUBMENU}" != true ]; then
-            allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+            allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
             cat << EOF
 menuentry '$(echo "$OS $onstr" | grub_quote)' $CLASS --class gnu-linux --class gnu --class os \$menuentry_id_option 'osprober-gnulinux-simple-$boot_device_id' ${allowed_user_list}{
 EOF
@@ -300,7 +300,7 @@ EOF
 	fi
 	title="${LLABEL} $onstr"
         ## No recovery modes are included here.
-	allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)"
+	allowed_user_list="$(grub_get_auth_user_list "$GRUB_ADVANCED_ACCESS_LEVEL")"
         cat << EOF
 	menuentry '$(echo "$title" | grub_quote)' --class gnu-linux --class gnu --class os \$menuentry_id_option 'osprober-gnulinux-$LKERNEL-${recovery_params}-$boot_device_id' ${allowed_user_list}{
 EOF
@@ -330,7 +330,7 @@ EOF
       echo "$title_correction_code"
     ;;
     macosx)
-      if [ "${UUID=`${grub_probe} --target=fs_uuid --device ${DEVICE}`}" ]; then
+      if [ "${UUID=`${grub_probe} --target=fs_uuid --device "${DEVICE}"`}" ]; then
 	OSXUUID="${UUID}"
 	osx_entry xnu_kernel 32
 	osx_entry xnu_kernel64 64
@@ -338,15 +338,15 @@ EOF
     ;;
     hurd)
       onstr="$(gettext_printf "(on %s)" "${DEVICE}")"
-      allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+      allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
       cat << EOF
 menuentry '$(echo "${LONGNAME} $onstr" | grub_quote)' --class hurd --class gnu --class os \$menuentry_id_option 'osprober-gnuhurd-/boot/gnumach.gz-false-$(grub_get_device_id "${DEVICE}")' ${allowed_user_list}{
 EOF
       save_default_entry | grub_add_tab
-      prepare_grub_to_access_device ${DEVICE} | grub_add_tab
-      grub_device="`${grub_probe} --device ${DEVICE} --target=drive`"
+      prepare_grub_to_access_device "${DEVICE}" | grub_add_tab
+      grub_device="`${grub_probe} --device "${DEVICE}" --target=drive`"
       mach_device="`echo "${grub_device}" | sed -e 's/(\(hd.*\),msdos\(.*\))/\1s\2/'`"
-      grub_fs="`${grub_probe} --device ${DEVICE} --target=fs`"
+      grub_fs="`${grub_probe} --device "${DEVICE}" --target=fs`"
       case "${grub_fs}" in
 	*fs)	hurd_fs="${grub_fs}" ;;
 	*)	hurd_fs="${grub_fs}fs" ;;
@@ -364,12 +364,12 @@ EOF
 EOF
     ;;
     minix)
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
 	  cat << EOF
 menuentry "${LONGNAME} (on ${DEVICE}, Multiboot)" ${allowed_user_list}{
 EOF
          save_default_entry | sed -e "s/^/\t/"
-         prepare_grub_to_access_device ${DEVICE} | sed -e "s/^/\t/"
+         prepare_grub_to_access_device "${DEVICE}" | sed -e "s/^/\t/"
 	 cat << EOF
 	multiboot /boot/image_latest
 }

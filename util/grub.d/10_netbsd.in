@@ -61,7 +61,7 @@ netbsd_load_fs_module ()
       ;;
   esac
 
-  case $(${grub_probe} --target=fs -d ${GRUB_DEVICE}) in
+  case $(${grub_probe} --target=fs -d "${GRUB_DEVICE}") in
     ext2)
       kmod="ext2fs"
       ;;
@@ -87,7 +87,7 @@ netbsd_load_fs_module ()
   fi
 
   kmodule_rel=$(make_system_path_relative_to_its_root "$kmodule") || return
-  prepare_grub_to_access_device $(${grub_probe} -t device "${kmodule}") | sed -e 's,^,	,' | sed "s/^/$submenu_indentation/"
+  prepare_grub_to_access_device "$(${grub_probe} -t device "${kmodule}")" | sed -e 's,^,	,' | sed "s/^/$submenu_indentation/"
   case "${loader}" in
     knetbsd)
       printf "${grub_tab}knetbsd_module_elf %s\n" "${kmodule_rel}" | sed "s/^/$submenu_indentation/"
@@ -107,7 +107,7 @@ netbsd_entry ()
   type="$3"
   args="$4"	# extra arguments appended to loader command
 
-  kroot_device="$(echo ${GRUB_DEVICE} | sed -e 's,^/dev/r,,')"
+  kroot_device="$(echo "${GRUB_DEVICE}" | sed -e 's,^/dev/r,,')"
 
   if [ -z "$boot_device_id" ]; then
       boot_device_id="$(grub_get_device_id "${GRUB_DEVICE}")"
@@ -115,11 +115,11 @@ netbsd_entry ()
 
   if [ "$type" != simple ] ; then
       if [ "$type" = recovery ] ; then
-	  title="$(gettext_printf "%s, with kernel %s (via %s, recovery mode)" "${OS}" "$(echo ${kernel} | sed -e 's,^.*/,,')" "${loader}")"
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)"
+	  title="$(gettext_printf "%s, with kernel %s (via %s, recovery mode)" "${OS}" "$(echo "${kernel}" | sed -e 's,^.*/,,')" "${loader}")"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_RECOVERY_ACCESS_LEVEL")"
       else
-	  title="$(gettext_printf "%s, with kernel %s (via %s)" "${OS}" "$(echo ${kernel} | sed -e 's,^.*/,,')" "${loader}")"
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)"
+	  title="$(gettext_printf "%s, with kernel %s (via %s)" "${OS}" "$(echo "${kernel}" | sed -e 's,^.*/,,')" "${loader}")"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_ADVANCED_ACCESS_LEVEL")"
       fi
       replacement_title="$(echo "Advanced options for ${OS}" | sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
       if [ "$title" = "$GRUB_ACTUAL_DEFAULT" ]; then
@@ -130,7 +130,7 @@ netbsd_entry ()
 
       echo "menuentry '$(echo "$title" | grub_quote)' \$menuentry_id_option 'netbsd-${loader}-$kernel-$type-$boot_device_id' ${allowed_user_list}{"  | sed "s/^/$submenu_indentation/"
   else
-      allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+      allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
       echo "menuentry '$(echo "$OS" | grub_quote)' \$menuentry_id_option 'netbsd-${loader}-simple-$boot_device_id' ${allowed_user_list}{"  | sed "s/^/$submenu_indentation/"
   fi
 
@@ -151,7 +151,7 @@ netbsd_entry ()
   printf "}\n" | sed "s/^/$submenu_indentation/"
 }
 
-prepare_boot_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE} | sed -e 's,^,	,')"
+prepare_boot_cache="$(prepare_grub_to_access_device "${GRUB_DEVICE}" | sed -e 's,^,	,')"
 boot_device_id=
 
 # We look for NetBSD kernels in / but not in subdirectories.  We simply
@@ -165,7 +165,7 @@ submenu_indentation=""
 list="/netbsd $(ls -t /netbsd?* 2>/dev/null)"
 
 if [ "$GRUB_TOP_LEVEL" != "" ]; then
-  list=$(grub_move_to_front "$GRUB_TOP_LEVEL" ${list})
+  list=$(grub_move_to_front "$GRUB_TOP_LEVEL" "${list}")
 fi
 
 is_top_level=true

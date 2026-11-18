@@ -95,7 +95,7 @@ for drv in $drives ; do
   dev=`${grub_probe} -t device "$dir" 2>/dev/null` || continue
 
   gettext_printf "Found %s on %s (%s)\n" "$OS" "$drv" "$dev" >&2
-  allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+  allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
   cat << EOF
 menuentry '$(echo "$OS" | grub_quote)' \$menuentry_id_option '$osid-$(grub_get_device_id "${dev}")' ${allowed_user_list}{
 EOF

@@ -40,7 +40,7 @@ if [ "${GRUB_DISTRIBUTOR}" = "" ] ; then
   OS=GNU
 else
   OS="${GRUB_DISTRIBUTOR} GNU/Hurd"
-  CLASS="--class $(echo ${GRUB_DISTRIBUTOR} | tr '[:upper:]' '[:lower:]' | cut -d' ' -f1|LC_ALL=C sed 's,[^[:alnum:]_],_,g') ${CLASS}"
+  CLASS="--class $(echo "${GRUB_DISTRIBUTOR}" | tr '[:upper:]' '[:lower:]' | cut -d' ' -f1|LC_ALL=C sed 's,[^[:alnum:]_],_,g') ${CLASS}"
 fi
 
 at_least_one=false
@@ -49,10 +49,10 @@ all_of_them=true
 # FIXME: add l4 here?
 kernel=
 for i in /boot/gnumach* ; do
-  if test -e $i ; then
-    basename=`basename $i`
-    dirname=`dirname $i`
-    rel_dirname=`make_system_path_relative_to_its_root $dirname`
+  if test -e "$i" ; then
+    basename=`basename "$i"`
+    dirname=`dirname "$i"`
+    rel_dirname=`make_system_path_relative_to_its_root "$dirname"`
     gettext_printf "Found GNU Mach: %s" "$i" >&2
     echo >&2
     kernels="${kernels} ${rel_dirname}/${basename}"
@@ -123,11 +123,11 @@ hurd_entry () {
       if [ "$type" = recovery ] ; then
 	  title="$(gettext_printf "%s, with Hurd %s (recovery mode)" "${OS}" "${kernel_base}")"
 	  oldtitle="$OS using $kernel_base (recovery mode)"
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_RECOVERY_ACCESS_LEVEL")"
       else
 	  title="$(gettext_printf "%s, with Hurd %s" "${OS}" "${kernel_base}")"
 	  oldtitle="$OS using $kernel_base"
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_ADVANCED_ACCESS_LEVEL")"
       fi
       if [ "$oldtitle" = "$GRUB_ACTUAL_DEFAULT" ]; then
 	  quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
@@ -138,7 +138,7 @@ hurd_entry () {
 menuentry '$(echo "$title" | grub_quote)' ${CLASS} \$menuentry_id_option 'gnuhurd-$kernel-$type-$(grub_get_device_id "${GRUB_DEVICE_BOOT}")' ${allowed_user_list}{
 EOF
   else
-      allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+      allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
       sed "s/^/$submenu_indentation/" << EOF
 menuentry '$(echo "$OS" | grub_quote)' ${CLASS} \$menuentry_id_option 'gnuhurd-simple-$(grub_get_device_id "${GRUB_DEVICE_BOOT}")' ${allowed_user_list}{
 EOF
@@ -245,10 +245,10 @@ submenu_indentation=""
 # other files to order the '.old' files after their non-old counterpart
 # in reverse-sorted order.
 
-reverse_sorted_kernels=$(echo ${kernels} | tr ' ' '\n' | sed -e 's/\.old$/ 1/; / 1$/! s/$/ 2/' | version_sort -r | sed -e 's/ 1$/.old/; s/ 2$//')
+reverse_sorted_kernels=$(echo "${kernels}" | tr ' ' '\n' | sed -e 's/\.old$/ 1/; / 1$/! s/$/ 2/' | version_sort -r | sed -e 's/ 1$/.old/; s/ 2$//')
 
 if [ "$GRUB_TOP_LEVEL" != "" ]; then
-  reverse_sorted_kernels=$(grub_move_to_front "$GRUB_TOP_LEVEL" ${reverse_sorted_kernels})
+  reverse_sorted_kernels=$(grub_move_to_front "$GRUB_TOP_LEVEL" "${reverse_sorted_kernels}")
 fi
 
 is_top_level=true

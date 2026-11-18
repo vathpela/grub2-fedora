@@ -54,7 +54,7 @@ printf '%b' '\052'
 printf '%b' '\216'
 
 # the name
-echo $ECHO_N $NOTE_NAME
+echo "$ECHO_N" "$NOTE_NAME"
 printf '%b' '\000'
 
 # Here comes the alignment.  As the size of name is 4, it's none.
@@ -117,7 +117,7 @@ END { print max_offset- $HEADER_SIZE }")
 # to generate hmac hash of the FILE
 #
 (cat header-fixed.bin; \
- dd ibs=1 skip=$HEADER_SIZE count=$COUNT if=$FILE status=none) \
+ dd ibs=1 skip=$HEADER_SIZE count="$COUNT" if=$FILE status=none) \
  | ./hmac256 --stdkey --binary
 
 rm -f header-fixed.bin

@@ -18,7 +18,7 @@ export TEXTDOMAINDIR="@localedir@"
 
 . "${pkgdatadir}/grub-mkconfig_lib"
 
-self=`basename $0`
+self=`basename "$0"`
 
 usage () {
     gettext_printf "Usage: %s -o OUTPUT CKBMAP_ARGUMENTS...\n" "$self"
@@ -41,7 +41,7 @@ argument () {
       gettext_printf "%s: option requires an argument -- \`%s'\n" "$0" "$opt" 1>&2
       exit 1
   fi
-  echo $1
+  echo "$1"
 }
 
 output=
@@ -58,7 +58,7 @@ do
 	echo "$self (${PACKAGE_NAME}) ${PACKAGE_VERSION}"
 	exit 0 ;;
     -o | --output)
-	output=`argument $option "$@"`; shift ;;
+	output=`argument "$option" "$@"`; shift ;;
     --output=*)
 	output=`echo "$option" | sed 's/--output=//'` ;;
     *)

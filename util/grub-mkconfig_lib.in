@@ -74,7 +74,7 @@ is_path_readable_by_grub ()
     return 1
   fi
 
-  if [ $GRUB_ENABLE_CRYPTODISK = y ]; then
+  if [ "$GRUB_ENABLE_CRYPTODISK" = y ]; then
       return 0
   fi
   
@@ -181,7 +181,7 @@ prepare_grub_to_access_device ()
   old_ifs="$IFS"
   IFS='
 '
-  partmap="`"${grub_probe}" --device $@ --target=partmap`"
+  partmap="`"${grub_probe}" --device "$@" --target=partmap`"
   access_modules=
   for module in ${partmap} ; do
     case "${module}" in
@@ -193,12 +193,12 @@ prepare_grub_to_access_device ()
   done
 
   # Abstraction modules aren't auto-loaded.
-  abstraction="`"${grub_probe}" --device $@ --target=abstraction`"
+  abstraction="`"${grub_probe}" --device "$@" --target=abstraction`"
   for module in ${abstraction} ; do
     grub_add_module "${module}"
   done
 
-  fs="`"${grub_probe}" --device $@ --target=fs`"
+  fs="`"${grub_probe}" --device "$@" --target=fs`"
   for module in ${fs} ; do
     grub_add_module "${module}"
   done
@@ -213,19 +213,19 @@ prepare_grub_to_access_device ()
   unset access_modules toplevel
 
   if [ "$GRUB_ENABLE_CRYPTODISK" = y ]; then
-      for uuid in `"${grub_probe}" --device $@ --target=cryptodisk_uuid`; do
+      for uuid in `"${grub_probe}" --device "$@" --target=cryptodisk_uuid`; do
 	  echo "cryptomount -u $uuid"
       done
   fi
 
   # If there's a filesystem UUID that GRUB is capable of identifying, use it;
   # otherwise set root as per value in device.map.
-  fs_hint="`"${grub_probe}" --device $@ --target=compatibility_hint`"
+  fs_hint="`"${grub_probe}" --device "$@" --target=compatibility_hint`"
   if [ "$fs_hint" != "" ]; then
     echo "set root='$fs_hint'"
   fi
-  if [ "${GRUB_DISABLE_UUID}" != "true" ] && fs_uuid="`"${grub_probe}" --device $@ --target=fs_uuid 2> /dev/null`" ; then
-    hints="`"${grub_probe}" --device $@ --target=hints_string 2> /dev/null`" || hints=
+  if [ "${GRUB_DISABLE_UUID}" != "true" ] && fs_uuid="`"${grub_probe}" --device "$@" --target=fs_uuid 2> /dev/null`" ; then
+    hints="`"${grub_probe}" --device "$@" --target=hints_string 2> /dev/null`" || hints=
     if [ "$hints" != "" ]; then
       echo "if [ x\$feature_platform_search_hint = xy ]; then"
       echo "  search --no-floppy --fs-uuid --set=root ${hints} ${fs_uuid}"
@@ -245,10 +245,10 @@ grub_get_device_id ()
   IFS='
 '
   device="$1"
-  if [ "${GRUB_DISABLE_UUID}" != "true" ] && fs_uuid="`"${grub_probe}" --device ${device} --target=fs_uuid 2> /dev/null`" ; then
+  if [ "${GRUB_DISABLE_UUID}" != "true" ] && fs_uuid="`"${grub_probe}" --device "${device}" --target=fs_uuid 2> /dev/null`" ; then
     echo "$fs_uuid";
   else
-    echo $device |sed 's, ,_,g'
+    echo "$device" |sed 's, ,_,g'
   fi
   IFS="$old_ifs"
 }
@@ -338,7 +338,7 @@ uses_abstraction () {
   IFS='
 '
 
-  abstraction="`"${grub_probe}" --device ${device} --target=abstraction`"
+  abstraction="`"${grub_probe}" --device "${device}" --target=abstraction`"
   for module in ${abstraction}; do
     if test "${module}" = "$2"; then
       IFS="$old_ifs"
@@ -367,7 +367,7 @@ print_option_help () {
       fi
   fi
   print_option_help_lead="  $1"
-  print_option_help_lspace="$(echo "$print_option_help_lead" | wc $print_option_help_wc)"
+  print_option_help_lspace="$(echo "$print_option_help_lead" | wc "$print_option_help_wc")"
   print_option_help_fill="$((26 - print_option_help_lspace))"
   printf "%s" "$print_option_help_lead"
   if test $print_option_help_fill -le 0; then
@@ -422,7 +422,7 @@ grub_get_auth_user_list () {
   ggaul_user_list=""
   
   # An access level is more privileged than another if it is closer to 0.
-  if test $GRUB_UNRESTRICTED_ACCESS_LEVEL -le $ggaul_access_level; then
+  if test "$GRUB_UNRESTRICTED_ACCESS_LEVEL" -le "$ggaul_access_level" ; then
       echo "--unrestricted "
       return
   fi
@@ -437,7 +437,7 @@ grub_get_auth_user_list () {
           continue
       fi
       
-      if test $ggaul_user_access -le $ggaul_access_level; then
+      if test "$ggaul_user_access" -le "$ggaul_access_level" ; then
           if test "$ggaul_user_list" = ""; then
               ggaul_user_list="$ggaul_user_name"
           else

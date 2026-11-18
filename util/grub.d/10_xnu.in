@@ -44,12 +44,12 @@ osx_entry() {
     fi
     # TRANSLATORS: it refers on the OS residing on device %s
     onstr="$(gettext_printf "(on %s)" "${GRUB_DEVICE}")"
-        allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+        allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
         cat << EOF
 menuentry '$(echo "Darwin/Mac OS X $bitstr $onstr" | grub_quote)' --class osx --class darwin --class os \$menuentry_id_option 'osprober-xnu-$2-$(grub_get_device_id "${GRUB_DEVICE}")' ${allowed_user_list}{
 EOF
 	save_default_entry | grub_add_tab
-	prepare_grub_to_access_device ${GRUB_DEVICE} | grub_add_tab
+	prepare_grub_to_access_device "${GRUB_DEVICE}" | grub_add_tab
 	cat << EOF
         load_video
         set do_resume=0
@@ -102,6 +102,6 @@ EOF
 EOF
 }
 
-OSXUUID="`${grub_probe} --target=fs_uuid --device ${GRUB_DEVICE} 2> /dev/null`"
+OSXUUID="`${grub_probe} --target=fs_uuid --device "${GRUB_DEVICE}" 2> /dev/null`"
 osx_entry xnu_kernel 32
 osx_entry xnu_kernel64 64

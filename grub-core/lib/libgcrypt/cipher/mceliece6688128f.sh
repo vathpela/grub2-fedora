@@ -80,7 +80,7 @@ FILES="	libmceliece-20230612/include-build/crypto_declassify.h
 ###
 
 set -e
-cd $1
+cd "$1"
 echo '/* mceliece6688128f.c - Classic McEliece for libgcrypt'
 echo ' * Copyright (C) 2023-2024 Simon Josefsson <simon@josefsson.org>'
 echo ' *'
@@ -168,7 +168,7 @@ for i in $FILES; do
 	    -e '/CRYPTO_NAMESPACE/d' \
 	    -e '/CRYPTO_SHARED_NAMESPACE/d' \
 	    -e 's/[	 ]*$//' \
-	    $i | \
+	    "$i" | \
 	case "$i" in
 	# Use int64_t for intermediate values in int32_MINMAX to prevent signed
 	# 32-bit integer overflow when called by crypto_sort_uint32.
@@ -195,8 +195,8 @@ for i in $FILES; do
 	    ;;
 	# Poor-man's #include now that we removed all #include's above.
 	*/shared-fft_*.c)
-	    INC=$(echo $i | sed -e "s,/shared-fft_,/," -e "s,.c$,.data,")
-	    DATA=$(echo $(cat $INC))
+	    INC=$(echo "$i" | sed -e "s,/shared-fft_,/," -e "s,.c$,.data,")
+	    DATA=$(cat "$INC")
 	    sed -e "s/};/$DATA\n};/"
 	    ;;
 	# Create three different versions of file depending on N.

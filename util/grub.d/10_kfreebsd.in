@@ -47,7 +47,7 @@ CLASS="--class os"
 case "${GRUB_DISTRIBUTOR}" in
   Debian)
 	OS="${GRUB_DISTRIBUTOR} GNU/kFreeBSD"
-	CLASS="--class $(echo ${GRUB_DISTRIBUTOR} | tr '[:upper:]' '[:lower:]' | cut -d' ' -f1|LC_ALL=C sed 's,[^[:alnum:]_],_,g') --class gnu-kfreebsd --class gnu ${CLASS}"
+	CLASS="--class $(echo "${GRUB_DISTRIBUTOR}" | tr '[:upper:]' '[:lower:]' | cut -d' ' -f1|LC_ALL=C sed 's,[^[:alnum:]_],_,g') --class gnu-kfreebsd --class gnu ${CLASS}"
   ;;
   *)
 	OS="FreeBSD"
@@ -71,7 +71,7 @@ load_kfreebsd_module ()
   fi
 
   if [ -z "${prepare_module_dir_cache}" ]; then
-    prepare_module_dir_cache="$(prepare_grub_to_access_device $(${grub_probe} -t device "${module_dir}") | grub_add_tab)"
+    prepare_module_dir_cache="$(prepare_grub_to_access_device "$(${grub_probe} -t device "${module_dir}")" | grub_add_tab)"
   fi
 
   printf '%s\n' "${prepare_module_dir_cache}"
@@ -94,10 +94,10 @@ kfreebsd_entry ()
   if [ "$type" != simple ] ; then
       if [ "$type" = recovery ] ; then
 	  title="$(gettext_printf "%s, with kFreeBSD %s (recovery mode)" "${os}" "${version}")"
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_RECOVERY_ACCESS_LEVEL)"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_RECOVERY_ACCESS_LEVEL")"
       else
 	  title="$(gettext_printf "%s, with kFreeBSD %s" "${os}" "${version}")"
-	  allowed_user_list="$(grub_get_auth_user_list $GRUB_ADVANCED_ACCESS_LEVEL)"
+	  allowed_user_list="$(grub_get_auth_user_list "$GRUB_ADVANCED_ACCESS_LEVEL")"
       fi
       replacement_title="$(echo "Advanced options for ${OS}" | sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
       if [ "$title" = "$GRUB_ACTUAL_DEFAULT" ]; then
@@ -107,18 +107,18 @@ kfreebsd_entry ()
       fi
       echo "menuentry '$(echo "$title" | grub_quote)' ${CLASS} \$menuentry_id_option 'kfreebsd-$version-$type-$boot_device_id' ${allowed_user_list}{" | sed "s/^/$submenu_indentation/"
   else
-      allowed_user_list="$(grub_get_auth_user_list $GRUB_SIMPLE_ACCESS_LEVEL)"
+      allowed_user_list="$(grub_get_auth_user_list "$GRUB_SIMPLE_ACCESS_LEVEL")"
       echo "menuentry '$(echo "$OS" | grub_quote)' ${CLASS} \$menuentry_id_option 'kfreebsd-simple-$boot_device_id' ${allowed_user_list}{" | sed "s/^/$submenu_indentation/"
   fi
   if [ "$type" != recovery ] ; then
       save_default_entry | grub_add_tab | sed "s/^/$submenu_indentation/"
   fi
   if [ -z "${prepare_boot_cache}" ]; then
-    prepare_boot_cache="$(prepare_grub_to_access_device ${GRUB_DEVICE_BOOT} | grub_add_tab)"
+    prepare_boot_cache="$(prepare_grub_to_access_device "${GRUB_DEVICE_BOOT}" | grub_add_tab)"
   fi
 
   printf '%s\n' "${prepare_boot_cache}" | sed "s/^/$submenu_indentation/"
-  message="$(gettext_printf "Loading kernel of FreeBSD %s ..." ${version})"
+  message="$(gettext_printf "Loading kernel of FreeBSD %s ..." "${version}")"
   sed "s/^/$submenu_indentation/" << EOF
 	echo			'$(echo "$message" | grub_quote)'
 	kfreebsd		${rel_dirname}/${basename} ${args}
@@ -132,7 +132,7 @@ EOF
 
   load_kfreebsd_module acpi true
 
-  for abstraction in dummy $(${grub_probe} -t abstraction --device ${GRUB_DEVICE}) ; do
+  for abstraction in dummy $(${grub_probe} -t abstraction --device "${GRUB_DEVICE}") ; do
     case $abstraction in
       lvm) load_kfreebsd_module geom_linux_lvm false ;;
     esac
@@ -151,9 +151,9 @@ EOF
   esac
 
   if [ "${kfreebsd_fs}" = ufs ]; then
-	load_kfreebsd_module ${kfreebsd_fs} true | sed "s/^/$submenu_indentation/"
+	load_kfreebsd_module "${kfreebsd_fs}" true | sed "s/^/$submenu_indentation/"
   else
-	load_kfreebsd_module ${kfreebsd_fs} false | sed "s/^/$submenu_indentation/"
+	load_kfreebsd_module "${kfreebsd_fs}" false | sed "s/^/$submenu_indentation/"
   fi
 
   sed "s/^/$submenu_indentation/" << EOF
@@ -182,25 +182,25 @@ submenu_indentation=""
 # other files to order the '.old' files after their non-old counterpart
 # in reverse-sorted order.
 
-reverse_sorted_list=$(echo ${list} | tr ' ' '\n' | sed -e 's/\.old$/ 1/; / 1$/! s/$/ 2/' | version_sort -r | sed -e 's/ 1$/.old/; s/ 2$//')
+reverse_sorted_list=$(echo "${list}" | tr ' ' '\n' | sed -e 's/\.old$/ 1/; / 1$/! s/$/ 2/' | version_sort -r | sed -e 's/ 1$/.old/; s/ 2$//')
 
 if [ "$GRUB_TOP_LEVEL" != "" ]; then
-  reverse_sorted_list=$(grub_move_to_front "$GRUB_TOP_LEVEL" ${reverse_sorted_list})
+  reverse_sorted_list=$(grub_move_to_front "$GRUB_TOP_LEVEL" "${reverse_sorted_list}")
 fi
 
 is_top_level=true
 
 for kfreebsd in ${reverse_sorted_list}; do
   gettext_printf "Found kernel of FreeBSD: %s\n" "$kfreebsd" >&2
-  basename=`basename $kfreebsd`
-  dirname=`dirname $kfreebsd`
-  rel_dirname=`make_system_path_relative_to_its_root $dirname`
+  basename=`basename "$kfreebsd"`
+  dirname=`dirname "$kfreebsd"`
+  rel_dirname=`make_system_path_relative_to_its_root "$dirname"`
 
   if [ -f /boot/device.hints ] ; then
     devices=/boot/device.hints
     devices_basename=`basename $devices`
     devices_dirname=`dirname $devices`
-    devices_rel_dirname=`make_system_path_relative_to_its_root $devices_dirname`
+    devices_rel_dirname=`make_system_path_relative_to_its_root "$devices_dirname"`
   fi
 
   case ${GRUB_FS} in
@@ -212,7 +212,7 @@ for kfreebsd in ${reverse_sorted_list}; do
   case ${GRUB_FS} in
     zfs)
 			# zpool name
-			kfreebsd_device=$(${grub_probe} -t fs_label --device ${GRUB_DEVICE})
+			kfreebsd_device=$(${grub_probe} -t fs_label --device "${GRUB_DEVICE}")
 			# filesystem name (empty string for the main filesystem)
 			kfreebsd_device="${kfreebsd_device}$(${grub_mkrelpath} / | sed -e "s,/*@$,,")"
     ;;
@@ -228,8 +228,8 @@ for kfreebsd in ${reverse_sorted_list}; do
 	  ;;
   esac
 
-  version=`echo $basename | sed -e "s,^[^0-9]*-,,g;s/\.gz$//g"`
-  alt_version=`echo $version | sed -e "s,\.old$,,g"`
+  version=`echo "$basename" | sed -e "s,^[^0-9]*-,,g;s/\.gz$//g"`
+  alt_version=`echo "$version" | sed -e "s,\.old$,,g"`
 
   module_dir=
   for i in "/lib/modules/${version}" "/lib/modules/${alt_version}" \
@@ -241,7 +241,7 @@ for kfreebsd in ${reverse_sorted_list}; do
   done
   if test -n "${module_dir}" ; then
     gettext_printf "Found kernel module directory: %s\n" "${module_dir}" >&2
-    module_dir_rel=$(make_system_path_relative_to_its_root $module_dir)
+    module_dir_rel=$(make_system_path_relative_to_its_root "$module_dir")
   fi
 
   # The GRUB_DISABLE_SUBMENU option used to be different than others since it was

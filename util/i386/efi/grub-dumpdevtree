@@ -19,4 +19,4 @@ if [ "$1" = "" ]; then
    echo "Filename required".
 fi
 
-ioreg -lw0 -p IODeviceTree -n efi -r -x |grep device-properties | sed 's/.*<//;s/>.*//;' | xxd -r -p > $1
+ioreg -lw0 -p IODeviceTree -n efi -r -x |grep device-properties | sed 's/.*<//;s/>.*//;' | xxd -r -p > "$1"
