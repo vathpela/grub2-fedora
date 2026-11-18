@@ -551,6 +551,7 @@ prepare_GNULIB_SRCDIR ()
         trap cleanup_gnulib HUP INT PIPE TERM
         gnulib_url=${GNULIB_URL:-$default_gnulib_url}
         if test -n "$GNULIB_REFDIR" && test -d "$GNULIB_REFDIR"/.git; then
+          # shellcheck disable=SC2015
           # Use GNULIB_REFDIR as a reference.
           git clone "$GNULIB_REFDIR" "$gnulib_path" \
           && git -C "$gnulib_path" remote set-url origin "$gnulib_url" \
@@ -1068,6 +1069,7 @@ symlink_to_dir()
       done
     fi
 
+    # shellcheck disable=SC2015
     if $copy; then
       {
         test ! -h "$dst" || {
