@@ -10,6 +10,9 @@ disable=SC2004
 # don't complain about backticks instead of $(...)
 disable=SC2006
 
+# don't complain about using ls instead of find
+disable=SC2012
+
 # don't complain about unused variables
 disable=SC2034
 
