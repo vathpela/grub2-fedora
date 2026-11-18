@@ -331,6 +331,7 @@ gettext_quoted () {
 gettext_printf () {
   gettext_printf_format="$1"
   shift
+  # shellcheck disable=SC2059
   printf "$(gettext "$gettext_printf_format")" "$@"
 }
 
