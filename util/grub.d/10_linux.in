@@ -63,12 +63,12 @@ esac
 
 # btrfs may reside on multiple devices. We cannot pass them as value of root= parameter
 # and mounting btrfs requires user space scanning, so force UUID in this case.
-if ( [ "${GRUB_DEVICE_UUID}" = "" ] && [ "${GRUB_DEVICE_PARTUUID}" = "" ] ) \
-    || ( [ "${GRUB_DISABLE_LINUX_UUID}" = "true" ] \
-	&& [ "${GRUB_DISABLE_LINUX_PARTUUID}" = "true" ] ) \
-    || ( ! findfs UUID="${GRUB_DEVICE_UUID}" > /dev/null 2>&1 \
-	&& ! findfs PARTUUID="${GRUB_DEVICE_PARTUUID}" > /dev/null 2>&1 ) \
-    || ( test -e "${GRUB_DEVICE}" && ( uses_abstraction "${GRUB_DEVICE}" lvm || uses_abstraction "${GRUB_DEVICE}" diskfilter ) ); then
+if { [ "${GRUB_DEVICE_UUID}" = "" ] && [ "${GRUB_DEVICE_PARTUUID}" = "" ]; } \
+    || { [ "${GRUB_DISABLE_LINUX_UUID}" = "true" ] \
+	&& [ "${GRUB_DISABLE_LINUX_PARTUUID}" = "true" ]; } \
+    || { ! findfs UUID="${GRUB_DEVICE_UUID}" > /dev/null 2>&1 \
+	&& ! findfs PARTUUID="${GRUB_DEVICE_PARTUUID}" > /dev/null 2>&1 ; } \
+    || { test -e "${GRUB_DEVICE}" && { uses_abstraction "${GRUB_DEVICE}" lvm || uses_abstraction "${GRUB_DEVICE}" diskfilter ; }; }; then
   LINUX_ROOT_DEVICE=${GRUB_DEVICE}
 elif [ "${GRUB_DEVICE_UUID}" = "" ] \
     || [ "${GRUB_DISABLE_LINUX_UUID}" = "true" ]; then
